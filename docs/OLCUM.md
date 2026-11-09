@@ -70,6 +70,26 @@ Referans kol `v01-ajansiz` 7 Kasım'da koşuldu (ilk metinde yanlışlıkla 8 Ka
 `--limit` duman testinden geldi (n=504 bunları içeriyor).
 
 
+## Uzun geçmiş testi (9 Kasım 2026)
+
+Gerçek 452 kaydın yanına modelle üretilmiş 5037 dikkat dağıtıcı kayıt eklendi (hafıza ~12 kat). Ön kayıtlı kural:
+varsayılan yapılandırmada ilk 20 kaydın kanıtı kapsama oranı (R@20) en çok 5 puan, uçtan uca doğruluk düşüşünün %95 GA
+üst sınırı 5 puanın altında olmalı.
+
+| | BM25 + BGE-M3 (varsayılan) | yalnız BM25 (`--vektorsuz`) |
+|---|---|---|
+| R@20, 452 → 5452 kayıt | 0,961 → 0,940 | 0,947 → 0,898 |
+| R@5, 452 → 5452 kayıt | 0,953 → 0,852 | 0,935 → 0,797 |
+| Uçtan uca doğruluk (168 test sorusu, 1 tekrar) | %91,7 → %90,5; fark +1,2 [−1,8, +4,2] | %90,5 → %83,9; fark +6,5 [+2,4, +10,7] |
+| Cevabı dikkat dağıtıcılara sızmış 4 "bilmiyorum" sorusu hariç | fark −0,6 [−3,0, +1,2] | fark +4,3 [+1,2, +7,9] |
+
+Sonuç: varsayılan yapılandırma kuralı sağladı; doğru kayıt büyük hafızada da çoğunlukla ilk 20'de kalıyor, ama sıralama
+(R@5) zayıflıyor ve en çok çok adımlı sorular etkileniyor. Yalnız kelime araması büyük hafızada anlamlı biçimde daha çok
+kaybediyor. Bağımsız doğrulama, dikkat dağıtıcıların birkaç gerçeği tekrar ettiğini ve 4 "bilmiyorum" sorusunun
+cevabını içerdiğini buldu; bulaşma oranı ölçülmedi, tabloya duyarlılık satırı eklendi. Dikkat dağıtıcılar aynı kurgusal
+kişiye aittir ve modelle üretildi; gerçek bir uzun geçmişin yerini tutmaz.
+
+
 ## 8 Kasım 2026 test turu (bütün kollar)
 
 

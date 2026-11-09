@@ -36,7 +36,10 @@ Bileşenler kurgusal bir kişinin 63 oturumluk geçmişinden üretilmiş, tasar�
 (Sonnet cevaplar, Opus hakem, 3 tekrar). Varsayılan yapılandırma (BM25 + BGE-M3) **%91,9**; yalnız kelime araması
 %90,7 (fark +1,2 puan, %95 GA [−0,2, +3,2]: ön kayıttaki eşiği geçemediği için varsayılan değil; diller arası sorularda
 %83'e karşı %92). Karşılaştırma: tek dosyalık hafıza (MEMORY.md tarzı) %73,6, not dosyası + kelime eşleştirme %76,6,
-hafızasız %19. Sınırlar: tek sentetik veri seti, Claude hakemi, kısa geçmiş. Ayrıntılar: [docs/OLCUM.md](docs/OLCUM.md).
+hafızasız %19. **Uzun geçmiş:** hafıza dikkat dağıtıcı kayıtlarla ~12 katına (5452 kayıt) çıkarılınca varsayılan
+yapılandırmada doğru kayıt yine çoğunlukla ilk 20'de kaldı (R@20 0,961 → 0,940) ve doğruluk anlamlı düşmedi (%91,7 →
+%90,5, fark GA [−1,8, +4,2]); sıralama ise zayıfladı (R@5 0,953 → 0,852). Sınırlar: tek sentetik veri seti, Claude
+hakemi. Ayrıntılar: [docs/OLCUM.md](docs/OLCUM.md).
 
 ## Dosyalar
 ```
@@ -67,5 +70,6 @@ Sürüm: `pyproject.toml` içindeki `version` artırılıp `vX.Y.Z` etiketi itil
   kendisi ele geçirilirse koruma sağlamaz. Bağımlılıklar (fastmcp, numpy, torch...) PyPI'dan, pakete gömülü kilit
   dosyalarındaki sabit sürüm ve SHA-256 özetleriyle kurulur; kilitte yalnız en az 7 günlük sürümler bulunur.
 - Klasörü kopyalarsanız kopyada kurucuyu yeniden çalıştırın; kopya kurulana kadar hafıza kopyada çalışmaz (uyarı verir).
+- `--vektorsuz` (yalnız kelime araması) hafıza büyüdükçe daha çok kaybeder: ~5000 kayıtta doğruluk 4–6 puan düştü.
 
 Lisans: Apache-2.0.
