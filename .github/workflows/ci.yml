@@ -1,0 +1,104 @@
+name: test
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        python: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install ".[test]"
+      - run: python -m pytest -q
+  kurulum:
+    # Gerçek kurulum denemesi: Türkçe karakterli, boşluklu klasöre kur, sağlık kontrolü, hook ve kayıt/ara.
+    # Her itmede yalnız kelime aramasıyla (hızlı); elle tetiklemede ve sürüm etiketinde Windows'ta tam sürümle (~2,5 GB).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: windows-latest, mod: hafif}
+          - {os: macos-latest, mod: hafif}
+          - {os: windows-latest, mod: tam}
+    runs-on: ${{ matrix.os }}
+    env:
+      KURULUM_MODU: ${{ matrix.mod }}
+      # iş düzeyinde `if` matrix'i göremez; koşul adımlarda
+      CALIS: ${{ matrix.mod == 'hafif' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.CALIS == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        if: env.CALIS == 'true'
+        with:
+          python-version: "3.13"
+      - name: paketle
+        if: env.CALIS == 'true'
+        run: python scripts/paketle.py
+      - name: kur ve doğrula
+        if: env.CALIS == 'true'
+        shell: python
+        run: |
+          import json, os, subprocess, sys, zipfile, tempfile
+          from pathlib import Path
+          dist = Path("dist").resolve(); z = next(dist.glob("council-hafiza-*.zip"))
+          os.chdir(os.environ["RUNNER_TEMP"])        # depo kökündeki kaynak kod değil, kurulan tekerlek sınansın
+          paket = Path(tempfile.mkdtemp()) / "paket"; zipfile.ZipFile(z).extractall(paket)
+          k = Path(os.environ["RUNNER_TEMP"]) / "Kardeş Beyni"; k.mkdir()
+          (k / "CLAUDE.md").write_text("# Notlarım\nBenim kuralım.\n", encoding="utf-8")
+          def kur():
+              ek = ["--vektorsuz"] if os.environ.get("KURULUM_MODU") != "tam" else []
+              r = subprocess.run([sys.executable, "-I", str(paket / "kur.py"), "--klasor", str(k), *ek], capture_output=True,
+                                 text=True, encoding="utf-8", errors="replace")
+              print(r.stdout[-4000:], r.stderr[-2000:])
+              return r
+          r = kur()
+          # claude bu makinede yok: kâtip uyarısı beklenir, zorunlu maddeler tamam olmalı
+          assert "SONUÇ: kurulum sağlıklı" in r.stdout, "doktor"
+          cfg = json.loads((k / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["council"]
+          py = cfg["command"]; assert Path(py).exists()
+          st = json.loads((k / ".claude" / "settings.json").read_text(encoding="utf-8"))["hooks"]["SessionStart"][0]["hooks"][0]
+          giris = json.dumps({"session_id": "ci", "cwd": str(k), "hook_event_name": "SessionStart", "source": "startup"})
+          o = subprocess.run([st["command"], *st["args"]], input=giris.encode("utf-8"), capture_output=True, cwd=str(k),
+                             env={**os.environ, "CLAUDE_PROJECT_DIR": str(k)})
+          ctx = json.loads(o.stdout.decode("ascii"))["hookSpecificOutput"]["additionalContext"]
+          assert "KİMLİK TANIMSIZ" in ctx, ctx
+          y = lambda *a: subprocess.run([py, "-X", "utf8", "-P", "-m", "council_hafiza.yerel", *a], capture_output=True, text=True,
+                                        encoding="utf-8", check=True, cwd=str(k)).stdout
+          (k / "calendar.py").write_text("raise SystemExit('KULLANICI DOSYASI')", encoding="utf-8")   # gölgeleme sınaması
+          assert "Kaydedildi: R00001" in y("kaydet", "Kardeşimin en sevdiği yemek mantı (2026-11-09).")
+          assert "mantı" in y("ara", "yemek")
+          if os.environ.get("KURULUM_MODU") == "tam":           # anlamsal arama: MCP sunucusu üzerinden İngilizce soru
+              import asyncio
+              from fastmcp import Client
+              from fastmcp.client.transports import StdioTransport
+              async def sor():
+                  tr = StdioTransport(command=py, args=cfg["args"], env={**os.environ, **cfg["env"]}, cwd=str(k))
+                  async with Client(tr) as c:
+                      return (await c.call_tool("hafiza_ara", {"soru": "favourite dish", "proje": "genel"})).content[0].text
+              cevap = asyncio.run(sor()); print(cevap)
+              assert "mantı" in cevap
+          r = kur()                                  # güncelleme: kayıt ve kullanıcı metni korunmalı
+          assert "SONUÇ: kurulum sağlıklı" in r.stdout
+          assert "mantı" in y("ara", "mantı")
+          assert (k / "CLAUDE.md").read_text(encoding="utf-8").startswith("# Notlarım\nBenim kuralım.")
+          v = json.loads((k / ".council" / "konum.json").read_text(encoding="utf-8"))["veri"]
+          veri = k / ".council" if v == "." else Path(v)
+          assert list((veri / "yedek").glob("guncelleme-oncesi-*.sqlite")), "güncelleme öncesi yedek yok"
+          print("KURULUM DENEMESİ GEÇTİ")

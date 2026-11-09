@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>COUNCIL paneli</title>
+<link rel="stylesheet" href="/panel/panel.css">
+</head>
+<body>
+<header class="ust">
+  <div>
+    <h1>COUNCIL · Sistem paneli</h1>
+    <p class="soluk" id="zaman">Rapor yükleniyor…</p>
+  </div>
+  <div class="ust-sag">
+    <div id="ozet" class="ozet"></div>
+    <form method="post" action="/panel/cikis"><button class="ikincil" type="submit">Çıkış</button></form>
+  </div>
+</header>
+<nav class="sekmeler" id="sekmeler">
+  <button data-s="bulgular" class="secili">Açıklar ve çelişkiler</button>
+  <button data-s="akis">Sistem akışı</button>
+  <button data-s="cihazlar">Cihazlar</button>
+  <button data-s="araclar">Araçlar ve görevleri</button>
+  <button data-s="durum">Sunucu ve hafıza</button>
+  <button data-s="gecmis">Geçmiş</button>
+</nav>
+<main>
+  <section id="s-bulgular" class="sekme">
+    <div class="filtre" id="filtre"></div>
+    <div id="bulgu-liste"></div>
+  </section>
+  <section id="s-akis" class="sekme gizli">
+    <p class="soluk">Kutular cihazları, düğümler araçları ve servisleri, oklar veri akışını gösterir. Renk: yeşil çalışıyor, sarı sessiz ya da bilinmiyor, kırmızı sorunlu.</p>
+    <div class="cerceve"><svg id="akis-svg" viewBox="0 0 1000 660" role="img" aria-label="Sistem akış diyagramı"></svg></div>
+    <div id="akis-liste"></div>
+  </section>
+  <section id="s-cihazlar" class="sekme gizli"><div id="cihaz-liste" class="izgara"></div></section>
+  <section id="s-araclar" class="sekme gizli"><div class="tablo-sar"><table id="arac-tablo"></table></div></section>
+  <section id="s-durum" class="sekme gizli"><div id="durum-liste" class="izgara"></div></section>
+  <section id="s-gecmis" class="sekme gizli">
+    <p class="soluk">Son denetimlerde ciddiyete göre bulgu sayısı (en yeni sağda).</p>
+    <div id="gecmis-grafik" class="gecmis"></div>
+  </section>
+</main>
+<script src="/panel/panel.js"></script>
+</body>
+</html>
