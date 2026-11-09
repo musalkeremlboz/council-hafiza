@@ -64,7 +64,8 @@ Sürüm: `pyproject.toml` içindeki `version` artırılıp `vX.Y.Z` etiketi itil
 
 ## Bilinen sınırlar
 - SHA-256 doğrulaması paketi indirme hatasına karşı korur; paket ve özet aynı GitHub sürümünden geldiği için deponun
-  kendisi ele geçirilirse koruma sağlamaz. Bağımlılıklar (fastmcp, numpy, torch...) PyPI'dan sürüm sabitlenmeden kurulur.
+  kendisi ele geçirilirse koruma sağlamaz. Bağımlılıklar (fastmcp, numpy, torch...) PyPI'dan, pakete gömülü kilit
+  dosyalarındaki sabit sürüm ve SHA-256 özetleriyle kurulur; kilitte yalnız en az 7 günlük sürümler bulunur.
 - Klasörü kopyalarsanız kopyada kurucuyu yeniden çalıştırın; kopya kurulana kadar hafıza kopyada çalışmaz (uyarı verir).
 
 Lisans: Apache-2.0.

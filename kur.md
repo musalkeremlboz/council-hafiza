@@ -90,7 +90,8 @@ zip=$(basename "$zipurl"); grep -q "  $zip\$" SHA256SUMS.txt || { echo "SHA256SU
 grep "  $zip\$" SHA256SUMS.txt | shasum -a 256 -c -     # "OK" yazmalı; yazmazsa DUR
 unzip -q "$zip" -d paket
 ```
-Arşivde yalnız `kur.py`, `kur.md`, `council_hafiza-*.whl` ve lisans dosyaları olmalı. Başka bir şey varsa dur.
+Arşivde yalnız `kur.py`, `kur.md`, `kilit.txt`, `kilit-vektor.txt` (bağımlılık kilitleri), `council_hafiza-*.whl` ve
+lisans dosyaları olmalı. Başka bir şey varsa dur.
 
 ### 4. Kurucuyu çalıştır
 Önce ne yapacağını göster, sonra kur (hedef: kullanıcının klasörü, tam yol):

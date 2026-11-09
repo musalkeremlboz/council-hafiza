@@ -196,6 +196,11 @@ def paket_bul(paket: Path) -> Path:
     raise KurulumHatasi(f"{paket} içinde council_hafiza-*.whl yok")
 
 
+def kilit_bul(paket: Path, vektor: bool) -> Path | None:
+    k = paket / ("kilit-vektor.txt" if vektor else "kilit.txt")
+    return k if k.exists() else None
+
+
 def paket_surumu(p: Path) -> str:
     if p.suffix == ".whl":
         return p.name.split("-")[1]
@@ -455,9 +460,15 @@ def _kur(a) -> int:
             calistir([sys.executable, "-m", "venv", d / "venv"])
         hedef = f"{teker}[vektor]" if ayar["vektor"] else str(teker)
         pip = [py, *PY_BAYRAK, "-m", "pip", "install", "--disable-pip-version-check", "--quiet", "--only-binary=:all:"]
-        # bağımlılıklar yalnız eksikse/uyumsuzsa kurulur (--upgrade yok): güncelleme açık bir oturum sırasında yapılır ve
-        # Windows'ta çalışan MCP sunucusunun kullandığı derlenmiş dosyalar (.pyd) üzerine yazılamaz
-        calistir(pip + [hedef])
+        kilit = kilit_bul(Path(a.paket).resolve(), ayar["vektor"])
+        if kilit:
+            # sabit sürümler ve SHA-256 özetleri: her bağımlılık doğrulanarak kurulur; kurulu sürüm kilitteki ile aynıysa
+            # dokunulmaz (Windows'ta açık oturumun MCP sunucusunun kullandığı derlenmiş dosyalar .pyd üzerine yazılamaz)
+            print(f"  bağımlılıklar: {kilit.name} (sabit sürüm, SHA-256 doğrulamalı)", flush=True)
+            calistir(pip + ["--require-hashes", "--no-deps", "-r", kilit])
+        else:                                              # kaynak klasöründen geliştirme kurulumu
+            print("  UYARI: kilit dosyası yok; bağımlılıklar sürüm sabitlenmeden kuruluyor", flush=True)
+            calistir(pip + [hedef])
         calistir(pip + ["--force-reinstall", "--no-deps", teker])    # paketin kendisi: sürüm aynı olsa da yenisi kurulsun
         if ayar["vektor"]:
             print("  anlamsal arama modeli indiriliyor (BGE-M3, ~2,3 GB; bir kez)...", flush=True)

@@ -1,4 +1,4 @@
-"""Sürüm paketini hazırlar: dist/council-hafiza-X.Y.Z.zip (kur.py, kur.md, tekerlek, lisans) ve dist/SHA256SUMS.txt."""
+"""Sürüm paketini hazırlar: dist/council-hafiza-X.Y.Z.zip (kur.py, kur.md, bağımlılık kilitleri, tekerlek, lisans) ve dist/SHA256SUMS.txt."""
 import hashlib
 import subprocess
 import sys
@@ -18,7 +18,7 @@ def main() -> None:
     surum = teker.name.split("-")[1]
     zp = DIST / f"council-hafiza-{surum}.zip"
     with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as z:
-        for ad in ("kur.py", "kur.md", "LICENSE", "NOTICE"):
+        for ad in ("kur.py", "kur.md", "kilit.txt", "kilit-vektor.txt", "LICENSE", "NOTICE"):
             z.write(KOK / ad, ad)
         z.write(teker, teker.name)
     satirlar = [f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}" for p in (zp, teker)]

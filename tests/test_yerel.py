@@ -322,3 +322,40 @@ def test_eski_onbellekte_hook_ag_beklemez_arka_plan_baslatir(denetim, monkeypatc
     assert "yeni 0.2.1" in y.guncelleme_notu(k)                       # eldeki bilgiyle hemen
     assert cagri["n"] == 0 and baslatilan == [k]
     assert y.guncelleme_notu(k) and baslatilan == [k]                  # zaman önceden yazıldı: ikinci başlatma yok
+
+
+# ---------------------------------------------------------------- bağımlılık kilidi
+def _kilit_paketleri(ad):
+    import re
+    yol = ROOT / ad
+    if not yol.exists():
+        pytest.skip(f"{ad} yok")
+    satirlar = yol.read_text(encoding="utf-8").splitlines()
+    paketler, ozetsiz, paket = {}, [], None
+    for s in satirlar:
+        m = re.match(r"^([A-Za-z0-9._-]+)==([^ ;\\]+)", s)
+        if m:
+            paket = m.group(1).lower().replace("_", "-")
+            paketler.setdefault(paket, []).append(m.group(2))
+            if "--hash=sha256:" not in s and not s.rstrip().endswith("\\"):
+                ozetsiz.append(paket)
+    return paketler, ozetsiz, yol.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("ad,ekler", [("kilit.txt", []), ("kilit-vektor.txt", ["vektor"])])
+def test_kilit_pyproject_bagimliliklarini_ozetleriyle_kapsar(ad, ekler):
+    import re
+    import tomllib
+    paketler, ozetsiz, metin = _kilit_paketleri(ad)
+    proje = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    istenen = list(proje["dependencies"]) + [b for e in ekler for b in proje["optional-dependencies"][e]]
+    for b in istenen:
+        ad_ = re.match(r"[A-Za-z0-9._-]+", b).group(0).lower().replace("_", "-")
+        assert ad_ in paketler, f"{b} kilitte yok: deploy/kilit.py çalıştırın"
+    assert not ozetsiz
+    assert metin.count("==") <= metin.count("--hash=sha256:")             # her sabit sürümün en az bir özeti var
+
+
+def test_kur_kilidi_kullanir(tmp_path):
+    (tmp_path / "kilit.txt").write_text("x==1 --hash=sha256:00\n", encoding="utf-8")
+    assert kur.kilit_bul(tmp_path, False) == tmp_path / "kilit.txt" and kur.kilit_bul(tmp_path, True) is None
