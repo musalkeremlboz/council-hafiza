@@ -98,15 +98,11 @@ def test_panel_ve_gezgin_ortak_kimligi_kullanir(tmp_path):
         assert "--kagit:" not in t                                            # renkler tek yerde: kimlik.css
 
 
-def test_yazilar_pakete_ve_yayina_girer():
-    """Yazı dosyaları kurulan pakette ve herkese açık yayında yoksa ekran yedek yazıya düşer."""
-    import sys
+def test_yazilar_pakete_girer():
+    """Yazı dosyaları kurulan pakette yoksa ekran yedek yazıya düşer. (Yayın listesi denetimi: tests/test_yayin.py)"""
     from pathlib import Path
     kok = Path(panel.__file__).resolve().parents[1]
     fontlar = sorted(p.name for p in (kok / "council_hafiza" / "fontlar").iterdir())
     assert len([f for f in fontlar if f.endswith((".ttf", ".otf"))]) == 4
     assert any(f.startswith("OFL-Anton") for f in fontlar) and any(f.startswith("OFL-IBMPlexMono") for f in fontlar)   # lisans metinleri
     assert '"fontlar/*"' in (kok / "pyproject.toml").read_text(encoding="utf-8")
-    sys.path.insert(0, str(kok / "deploy"))
-    import yayin_hazirla
-    assert "kimlik.css" in yayin_hazirla.PAKET and all(f"fontlar/{f}" in yayin_hazirla.PAKET for f in fontlar)
