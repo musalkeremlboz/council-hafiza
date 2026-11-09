@@ -4,18 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>COUNCIL paneli</title>
+<link rel="stylesheet" href="/panel/kimlik.css">
 <link rel="stylesheet" href="/panel/panel.css">
 </head>
 <body>
 <header class="ust">
   <div>
-    <h1>COUNCIL · Sistem paneli</h1>
+    <a class="marka" href="/panel" aria-label="COUNCIL Panel">
+      <span class="isaret" data-isaret aria-hidden="true"></span>
+      <span class="marka-ad"><span class="kucuk" lang="en">COUNCIL</span><span class="buyuk">Panel</span></span>
+    </a>
     <p class="soluk" id="zaman">Rapor yükleniyor…</p>
   </div>
   <div class="ust-sag">
     <div id="ozet" class="ozet"></div>
-    <a class="gezgin-bag" href="/panel/gezgin">Gezgin: hafıza kayıtları →</a>
-    <form method="post" action="/panel/cikis"><button class="ikincil" type="submit">Çıkış</button></form>
+    <a class="dugme vurgu" href="/panel/gezgin">Gezgin</a>
+    <form method="post" action="/panel/cikis"><button class="dugme" type="submit">Çıkış</button></form>
   </div>
 </header>
 <nav class="sekmeler" id="sekmeler">
@@ -44,6 +48,7 @@
     <div id="gecmis-grafik" class="gecmis"></div>
   </section>
 </main>
+<script src="/panel/kimlik.js"></script>
 <script src="/panel/panel.js"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 [project]
 name = "council-hafiza"
-version = "0.2.4"
+version = "0.2.5"
 description = "COUNCIL: bütün yapay zeka araçlarının ortak hafızası (MCP sunucusu)"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -23,4 +23,4 @@ build-backend = "setuptools.build_meta"
 packages = ["council_hafiza"]
 
 [tool.setuptools.package-data]
-council_hafiza = ["*.html", "*.js", "*.css"]
+council_hafiza = ["*.html", "*.js", "*.css", "fontlar/*"]

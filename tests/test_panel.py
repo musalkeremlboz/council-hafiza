@@ -59,3 +59,54 @@ def test_panel_akisi(tmp_path, monkeypatch):
 def test_dev_cerez_500_vermez():
     """Binlerce rakamlı 'bitiş' değeri int() sınırına takılıp 500 üretmesin; geçersiz oturum sayılsın."""
     assert panel.oturum_gecerli("h", "9" * 5000 + ".x") is False
+
+
+def _istemci(tmp_path):
+    m = FastMCP("t")
+    panel.kaydet(m, SahteAuth(hash_password("dogru-parola-123")), Store(tmp_path / "p.sqlite", anahtar=""))
+    return TestClient(m.http_app(), base_url="https://test")
+
+
+def test_kimlik_yazilari_sunucudan_gelir(tmp_path):
+    """Kimlik yazıları (Anton, IBM Plex Mono, Kapsül) paketten sunulur; dışarıya istek gitmez, giriş sayfası da kullanır."""
+    import re
+    c = _istemci(tmp_path)
+    giris = c.get("/panel")
+    assert "font-src 'self'" in giris.headers["content-security-policy"]
+    assert "/panel/kimlik.css" in giris.text                                  # giriş sayfası da kimliği kullanır
+    css = c.get("/panel/kimlik.css")
+    assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
+    adlar = re.findall(r"url\(/panel/font/([^)]+)\)", css.text)
+    assert {"Anton-Regular.ttf", "IBMPlexMono-Regular.ttf", "IBMPlexMono-Medium.ttf", "COUNCIL-Kapsul-Kalin.otf"} == set(adlar)
+    assert "http" not in css.text                                             # dış kaynak yok
+    for ad in adlar:
+        r = c.get(f"/panel/font/{ad}")                                        # girişsiz: giriş sayfası da yazıyı yükler
+        assert r.status_code == 200 and r.headers["content-type"].startswith("font/") and len(r.content) > 5000
+        assert r.headers["x-content-type-options"] == "nosniff"
+    for kotu in ("yok.ttf", "..%2Fpanel.py", "OFL-Anton.md"):
+        assert c.get(f"/panel/font/{kotu}").status_code == 404
+
+
+def test_panel_ve_gezgin_ortak_kimligi_kullanir(tmp_path):
+    c = _istemci(tmp_path)
+    c.post("/panel/giris", data={"parola": "dogru-parola-123"})
+    for yol in ("/panel", "/panel/gezgin"):
+        assert "/panel/kimlik.css" in c.get(yol).text
+    for yol in ("/panel/panel.css", "/panel/gezgin/gezgin.css"):
+        t = c.get(yol).text
+        assert "#2d5bd7" not in t and "border-radius: 10px" not in t          # eski mavi-gri görünüm kalmadı
+        assert "--kagit:" not in t                                            # renkler tek yerde: kimlik.css
+
+
+def test_yazilar_pakete_ve_yayina_girer():
+    """Yazı dosyaları kurulan pakette ve herkese açık yayında yoksa ekran yedek yazıya düşer."""
+    import sys
+    from pathlib import Path
+    kok = Path(panel.__file__).resolve().parents[1]
+    fontlar = sorted(p.name for p in (kok / "council_hafiza" / "fontlar").iterdir())
+    assert len([f for f in fontlar if f.endswith((".ttf", ".otf"))]) == 4
+    assert any(f.startswith("OFL-Anton") for f in fontlar) and any(f.startswith("OFL-IBMPlexMono") for f in fontlar)   # lisans metinleri
+    assert '"fontlar/*"' in (kok / "pyproject.toml").read_text(encoding="utf-8")
+    sys.path.insert(0, str(kok / "deploy"))
+    import yayin_hazirla
+    assert "kimlik.css" in yayin_hazirla.PAKET and all(f"fontlar/{f}" in yayin_hazirla.PAKET for f in fontlar)

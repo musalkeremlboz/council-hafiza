@@ -1,47 +1,5 @@
-/* COUNCIL Gezgin — kimlik: kağıt, mürekkep, turuncu; kalın çizgiler, yuvarlatılmamış köşeler.
-   Panel CSP'si dış font yüklemeye izin vermez: başlıkta Impact ailesi, metinde sistemin eş aralıklı yazısı. */
-:root {
-  --kagit: #EDEBE4; --murekkep: #111111; --turuncu: #FF4F00; --gri: #DAD7CE; --soluk: #5E5B53;
-  --zemin: var(--kagit); --metin: var(--murekkep); --yuzey: var(--kagit); --ikincil-yuzey: var(--gri); --ters-zemin: var(--murekkep); --ters-metin: var(--kagit);
-  --iyi: #1F7A45; --kotu: #B42318;
-  --baslik: Anton, Impact, Haettenschweiler, "Arial Narrow Bold", "Arial Narrow", sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --cizgi: 4px solid var(--metin); --ince: 2px solid var(--metin);
-}
-@media (prefers-color-scheme: dark) {
-  :root { --zemin: #111111; --metin: #EDEBE4; --yuzey: #111111; --ikincil-yuzey: #26241F; --ters-zemin: #EDEBE4; --ters-metin: #111111;
-    --soluk: #A8A49A; --iyi: #4ADE80; --kotu: #F87171; color-scheme: dark; }
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--zemin); color: var(--metin); font: 14px/1.55 var(--mono); }
-a { color: inherit; }
-button, input, select, textarea { font: inherit; color: inherit; }
-:focus-visible { outline: 3px solid var(--turuncu); outline-offset: 2px; }
-.gizli { display: none !important; }
-.et { display: block; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--soluk); margin-bottom: 2px; }
-
-/* üst bant */
-.ust { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 20px; border-bottom: var(--cizgi); }
-.marka { display: flex; align-items: center; gap: 14px; text-decoration: none; }
-.isaret svg { width: 52px; height: 52px; display: block; }
-.marka-ad .kucuk { display: block; font-size: 11px; letter-spacing: .16em; }
-.marka-ad .buyuk { display: block; font-family: var(--baslik); font-size: 34px; line-height: .9; text-transform: uppercase; letter-spacing: .01em; }
-.ust-sag { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* COUNCIL Gezgin — renkler, yazılar, üst bant, düğmeler ve sekmeler kimlik.css'ten gelir; burada yalnız Gezgin'e özel parçalar var. */
 .sayac { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
-.dugme { display: inline-block; border: var(--ince); background: var(--yuzey); padding: 6px 12px; cursor: pointer; text-decoration: none;
-  font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
-.dugme:hover { background: var(--metin); color: var(--zemin); }
-.dugme.vurgu { background: var(--turuncu); color: #111111; border-color: var(--metin); }
-.dugme.vurgu:hover { background: var(--metin); color: var(--turuncu); }
-.dugme.tehlike { border-color: var(--kotu); color: var(--kotu); }
-.dugme.tehlike:hover { background: var(--kotu); color: #fff; }
-.dugme:disabled { opacity: .5; cursor: wait; }
-
-/* sekmeler */
-.sekmeler { display: flex; border-bottom: var(--cizgi); }
-.sekmeler button { border: 0; border-right: var(--ince); background: var(--yuzey); padding: 12px 20px; cursor: pointer;
-  font-family: var(--baslik); font-size: 22px; text-transform: uppercase; line-height: 1; }
-.sekmeler button.secili { background: var(--metin); color: var(--zemin); }
 .say { font-family: var(--mono); font-size: 12px; vertical-align: middle; background: var(--turuncu); color: #111; padding: 1px 6px; margin-left: 4px; }
 .say:empty { display: none; }
 
@@ -164,12 +122,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   input, select, textarea { font-size: 16px; }   /* iOS, 16 pikselden küçük alana odaklanınca sayfayı yakınlaştırır */
 }
 @media (max-width: 560px) {
-  .ust, .suzgec, .bilgi, .sayfalar, .aciklama { padding-left: 16px; padding-right: 16px; }
+  .suzgec, .bilgi, .sayfalar, .aciklama { padding-left: 16px; padding-right: 16px; }
   .satir { padding-left: 10px; padding-right: 16px; }
-  .marka-ad .buyuk { font-size: 28px; }
-  .isaret svg { width: 42px; height: 42px; }
   .suzgec label:not(.ara) { flex: 1 1 40%; }
   .sekmeler button { flex: 1; padding: 12px 10px; font-size: 18px; }
   .form .iki { grid-template-columns: 1fr; }
 }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

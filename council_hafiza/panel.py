@@ -18,8 +18,11 @@ from pathlib import Path
 OTURUM_SURE = 12 * 3600
 CEREZ = "council_panel"
 BURADA = Path(__file__).resolve().parent
-CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; "
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self' data:; "
        "form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+# Kimlik yazıları (fontlar/): yalnız bu listedekiler sunulur. Gizli bir şey değil; giriş sayfası da kullanır, önbelleğe alınabilir.
+FONTLAR = {"Anton-Regular.ttf": "font/ttf", "IBMPlexMono-Regular.ttf": "font/ttf", "IBMPlexMono-Medium.ttf": "font/ttf",
+           "COUNCIL-Kapsul-Kalin.otf": "font/otf"}
 GUVENLIK = {"Content-Security-Policy": CSP, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
             "Cache-Control": "no-store", "X-Frame-Options": "DENY", "Strict-Transport-Security": "max-age=31536000"}
 
@@ -62,11 +65,14 @@ def panel_verisi(denetim_dir: Path) -> dict:
 def _giris_sayfasi(mesaj: str | None = None) -> str:
     m = f'<p class="hata">{html.escape(mesaj)}</p>' if mesaj else ""
     return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>COUNCIL paneli</title><link rel="stylesheet" href="/panel/panel.css"></head>
+<title>COUNCIL paneli</title><link rel="stylesheet" href="/panel/kimlik.css"><link rel="stylesheet" href="/panel/panel.css"></head>
 <body class="giris"><form method="post" action="/panel/giris" class="kart">
-<h1>COUNCIL · Sistem paneli</h1><p class="soluk">Yönetici parolasıyla gir (claude.ai bağlantısındaki parola).</p>{m}
-<input type="password" name="parola" autocomplete="current-password" placeholder="Yönetici parolası" required autofocus>
-<button type="submit">Giriş</button></form></body></html>"""
+<div class="marka"><span class="isaret" data-isaret aria-hidden="true"></span>
+<h1 class="marka-ad"><span class="kucuk" lang="en">COUNCIL</span><span class="buyuk">Panel</span></h1></div>
+<p class="soluk">Yönetici parolasıyla gir (claude.ai bağlantısındaki parola).</p>{m}
+<label><span class="et">Yönetici parolası</span>
+<input type="password" name="parola" autocomplete="current-password" required autofocus></label>
+<button class="dugme vurgu" type="submit">Giriş</button></form><script src="/panel/kimlik.js"></script></body></html>"""
 
 
 def kaydet(mcp, auth, store) -> None:
@@ -122,6 +128,23 @@ def kaydet(mcp, auth, store) -> None:
     @mcp.custom_route("/panel/panel.css", methods=["GET"], include_in_schema=False)
     async def panel_css(request):
         return FileResponse(BURADA / "panel.css", media_type="text/css", headers=GUVENLIK)
+
+    # Ortak kimlik (panel, Gezgin, giriş sayfası): renkler ve yazılar, işaret, yazı dosyaları
+    @mcp.custom_route("/panel/kimlik.css", methods=["GET"], include_in_schema=False)
+    async def kimlik_css(request):
+        return FileResponse(BURADA / "kimlik.css", media_type="text/css", headers=GUVENLIK)
+
+    @mcp.custom_route("/panel/kimlik.js", methods=["GET"], include_in_schema=False)
+    async def kimlik_js(request):
+        return FileResponse(BURADA / "kimlik.js", media_type="text/javascript", headers=GUVENLIK)
+
+    @mcp.custom_route("/panel/font/{ad}", methods=["GET"], include_in_schema=False)
+    async def font(request):
+        ad = request.path_params["ad"]
+        if ad not in FONTLAR:                                # yalnız listedeki adlar: yol içeren ya da başka dosya isteyen 404 alır
+            return Response(status_code=404, headers=GUVENLIK)
+        return FileResponse(BURADA / "fontlar" / ad, media_type=FONTLAR[ad],
+                            headers={**GUVENLIK, "Cache-Control": "public, max-age=604800"})
 
     from .gezgin import kaydet as gezgin_kaydet
     gezgin_kaydet(mcp, auth, store, girisli, CEREZ, GUVENLIK, denetim_dir)

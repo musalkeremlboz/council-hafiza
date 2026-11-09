@@ -103,7 +103,7 @@ function akis() {
   defs.append(m); s.append(defs);
   const kutular = [[20, 20, 310, 410, "Mac (MacBook)"], [20, 470, 310, 170, "Tarayıcı / telefon"], [640, 20, 340, 620, "Sunucu (VPS)"]];
   for (const [x, y, w, h, t] of kutular) {
-    s.append(sv("rect", { x, y, width: w, height: h, rx: 12, class: "kutu" }));
+    s.append(sv("rect", { x, y, width: w, height: h, class: "kutu" }));
     s.append(sv("text", { x: x + 14, y: y + 22, class: "kutu-baslik" }, t));
   }
   const renk = { iyi: "var(--iyi)", uyari: "var(--uyari)", kotu: "var(--kotu)" };
@@ -126,7 +126,7 @@ function akis() {
   for (const [id, [x, y, ad]] of Object.entries(KONUM)) {
     const d = dugumDurum(id);
     const g = sv("g");
-    const kutu = sv("rect", { x: x - 118, y: y - 18, width: 236, height: 36, rx: 8, class: "dugum" });
+    const kutu = sv("rect", { x: x - 118, y: y - 18, width: 236, height: 36, class: "dugum" });
     kutu.style.stroke = renk[d];
     const isik = sv("circle", { cx: x - 102, cy: y, r: 5 });
     isik.style.fill = renk[d];
