@@ -90,6 +90,25 @@ cevabını içerdiğini buldu; bulaşma oranı ölçülmedi, tabloya duyarlılı
 kişiye aittir ve modelle üretildi; gerçek bir uzun geçmişin yerini tutmaz.
 
 
+## İkinci veri seti (9 Kasım 2026)
+
+Aşırı uydurmayı denetlemek için bambaşka bir kurgusal kişiyle (veteriner, İzmir) yeni bir veri seti üretildi: 158 gerçek,
+65 oturum, 210 soru, aynı kollar, hiçbir ayar değiştirilmeden, ön kayıtla.
+
+| Kol | Doğruluk | İlk veri seti |
+|---|---|---|
+| BM25 + BGE-M3 (varsayılan) | **%94,8** | %91,9 |
+| yalnız BM25 (`--vektorsuz`) | %92,9 | %90,7 |
+| not dosyası + kelime eşleştirme | %68,1 | %76,6 |
+| tek dosya (MEMORY.md tarzı) | %66,2 | %73,6 |
+| hafızasız | %19,0 | %19 |
+
+Varsayılanın tek dosyaya üstünlüğü +28,6 puan [+21,9, +35,2], not dosyasına +26,7 [+21,0, +32,9]: ilk sonuç tekrarlandı.
+Projeye özel bilgilerin hepsi başka projeden sorulunca gizli kaldı (15/15). Bağımsız doğrulamanın çekinceleri: kapsam
+sınaması yalnız iş gizliliğini kapsıyor; kâtip iki veri setinde de sıradan bilgilerin ~%20'sini fazladan gizli
+işaretliyor (aynı projeden sorulunca zararsız); üretilmiş diyaloglardaki çelişkiler bütün kolları biraz aşağı çekiyor.
+
+
 ## 8 Kasım 2026 test turu (bütün kollar)
 
 
