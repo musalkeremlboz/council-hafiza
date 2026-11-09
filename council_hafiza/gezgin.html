@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>COUNCIL Gezgin</title>
+<link rel="stylesheet" href="/panel/gezgin/gezgin.css">
+</head>
+<body>
+<header class="ust">
+  <a class="marka" href="/panel/gezgin" aria-label="COUNCIL Gezgin">
+    <span id="isaret" class="isaret" aria-hidden="true"></span>
+    <span class="marka-ad"><span class="kucuk" lang="en">COUNCIL</span><span class="buyuk">Gezgin</span></span>
+  </a>
+  <div class="ust-sag">
+    <span id="sayac" class="sayac"></span>
+    <a class="dugme ikincil" href="/panel">Panel</a>
+    <form method="post" action="/panel/cikis"><button class="dugme ikincil" type="submit">Çıkış</button></form>
+  </div>
+</header>
+
+<nav class="sekmeler" role="tablist" aria-label="Görünüm">
+  <button type="button" role="tab" aria-selected="true" data-g="kayitlar" class="secili">Kayıtlar</button>
+  <button type="button" role="tab" aria-selected="false" data-g="oneriler">Öneriler <span id="oneri-say" class="say"></span></button>
+</nav>
+
+<section id="g-kayitlar">
+  <form class="suzgec" id="suzgec" autocomplete="off">
+    <label class="ara"><span class="et">Ara</span><input id="q" type="search" placeholder="Metin, konu ya da R00123"></label>
+    <label><span class="et">Proje</span><select id="f-proje"><option value="">Hepsi</option></select></label>
+    <label><span class="et">Araç</span><select id="f-arac"><option value="">Hepsi</option></select></label>
+    <label><span class="et">Tür</span><select id="f-tur"><option value="">Hepsi</option></select></label>
+    <label><span class="et">Başlangıç</span><input id="f-bas" type="date"></label>
+    <label><span class="et">Bitiş</span><input id="f-son" type="date"></label>
+    <label><span class="et">Sıra</span><select id="f-sira"><option value="yeni">Yeniden eskiye</option><option value="eski">Eskiden yeniye</option></select></label>
+    <div class="durumlar" role="group" aria-label="Durum" id="durumlar">
+      <button type="button" data-d="guncel" class="secili" aria-pressed="true">Güncel</button>
+      <button type="button" data-d="eski" aria-pressed="false">Eski</button>
+      <button type="button" data-d="arsiv" aria-pressed="false">Arşiv</button>
+      <button type="button" data-d="hepsi" aria-pressed="false">Hepsi</button>
+    </div>
+    <button type="button" class="dugme ikincil" id="temizle">Süzgeçleri temizle</button>
+  </form>
+
+  <div class="secim gizli" id="secim">
+    <span id="secim-say"></span>
+    <button type="button" class="dugme vurgu" id="birlestir-ac">Birleştir</button>
+    <button type="button" class="dugme ikincil" id="secim-temizle">Seçimi temizle</button>
+  </div>
+
+  <div class="duzen">
+    <div class="liste-sar">
+      <p class="bilgi" id="liste-bilgi">Yükleniyor…</p>
+      <ol class="liste" id="liste"></ol>
+      <div class="sayfalar" id="sayfalar"></div>
+    </div>
+    <aside class="ayrinti" id="ayrinti" aria-live="polite">
+      <div class="bos">
+        <p class="bos-baslik">Bir kayıt seç</p>
+        <p>Listeden bir kayda dokununca metni, geçmişi ve işlemleri burada açılır. Birleştirmek için kutucuklarla birden çok kayıt seç.</p>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<section id="g-oneriler" class="gizli">
+  <p class="aciklama">Denetim ajanının hafızada bulduğu çelişkiler, tekrarlar ve uzun süredir açık görevler. Her öneride kayıtları karşılaştırıp tek dokunuşla çözebilirsin. Hiçbir kayıt silinmez.</p>
+  <div id="oneri-liste"></div>
+</section>
+
+<div class="bildirim sakli" id="bildirim" role="status" aria-live="polite"></div>
+<script src="/panel/gezgin/gezgin.js"></script>
+</body>
+</html>

@@ -123,4 +123,7 @@ def kaydet(mcp, auth, store) -> None:
     async def panel_css(request):
         return FileResponse(BURADA / "panel.css", media_type="text/css", headers=GUVENLIK)
 
+    from .gezgin import kaydet as gezgin_kaydet
+    gezgin_kaydet(mcp, auth, store, girisli, CEREZ, GUVENLIK, denetim_dir)
+
     _ = Response

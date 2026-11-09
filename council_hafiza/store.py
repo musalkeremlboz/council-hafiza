@@ -287,6 +287,48 @@ class Store:
             self.log(actor, "arsivle", rid, {"neden": reason})
             return True
 
+    def unarchive(self, actor: Actor, rid: str, reason: str) -> bool:
+        """Arşivdeki kaydı geri getirir (Gezgin). Kayıt arşivde değilse False."""
+        with self.yaz():
+            cur = self.db.execute("UPDATE records SET archived=0, archive_reason=NULL WHERE id=? AND archived=1", (rid,))
+            if cur.rowcount == 0:
+                return False
+            self.log(actor, "arsivden_cikar", rid, {"neden": reason})
+            return True
+
+    def replace_records(self, actor: Actor, old_ids: list[str], rec: dict, reason: str, action: str) -> str:
+        """Yeni bir kayıt yazar ve eskilerin HEPSİNİ onunla geçersiz kılar; tek işlemde, ya hep ya hiç (Gezgin'in düzelt ve
+        birleştir işlemleri). Eski kayıtlardan biri bu arada değiştiyse ValueError atar ve hiçbir şey yazılmaz."""
+        with self.yaz():
+            for o in old_ids:
+                if not self.is_current(o):
+                    raise ValueError(f"{o} artık güncel değil (başka biri değiştirmiş olabilir)")
+            rid = self.add_record(actor, rec)
+            for o in old_ids:
+                if not self.supersede(actor, o, rid, reason):
+                    raise ValueError(f"{o} geçersiz kılınamadı")
+            self.log(actor, action, rid, {"kaynaklar": list(old_ids), "neden": reason})
+        return rid
+
+    def list_records(self, with_embedding: bool = False) -> list[dict]:
+        """Bütün kayıtlar (yönetici görünümü; görünürlük süzgeci yok). Vektör sütunu yalnız istenirse okunur."""
+        cols = "*" if with_embedding else ("id, text, context, keys, kind, visibility, trust, valid_from, valid_to, superseded_by, "
+                                           "archived, archive_reason, tool, project, client_id, created_at")
+        return [dict(r) for r in self.q(f"SELECT {cols} FROM records")]
+
+    def record_history(self, rid: str) -> list[dict]:
+        """Bir kayda dokunan bütün olaylar (kaydet, geçersiz kıl, arşivle, birleştir...) eskiden yeniye."""
+        rows = self.q("SELECT seq, ts, tool, project, action, record_id, payload FROM events WHERE record_id=? ORDER BY seq", (rid,))
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["payload"] = json.loads(d["payload"] or "{}")
+            except ValueError:
+                d["payload"] = {}
+            out.append(d)
+        return out
+
     def visible_records(self, project: str, include_archived: bool = False) -> list[dict]:
         sql = "SELECT * FROM records WHERE (visibility='shared' OR project=?)"
         if not include_archived:
