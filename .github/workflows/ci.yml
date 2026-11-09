@@ -1,10 +1,10 @@
 name: test
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
+    branches: [main, gelistirme]
   pull_request:
   workflow_dispatch:
+  workflow_call:          # sürüm iş akışı yayımlamadan önce bütün denemeleri bununla koşar
 permissions:
   contents: read
 jobs:
@@ -89,8 +89,30 @@ jobs:
               print(y("vektor-doldur"))
               cevap = y("ara", "favourite dish"); print(cevap)
               assert "mantı" in cevap, "anlamsal arama Türkçe kaydı bulmadı"
-          r = kur()                                  # güncelleme: kayıt ve kullanıcı metni korunmalı
-          assert "SONUÇ: kurulum sağlıklı" in r.stdout
+          # güncelleme açık bir oturumun içinden yapılır: o oturumun MCP sunucusu venv'i kullanırken kur
+          sunucu = subprocess.Popen([py, "-X", "utf8", "-P", "-m", "council_hafiza.yerel", "sunucu"], cwd=str(k),
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+          def gonder(m):
+              sunucu.stdin.write((json.dumps(m) + "\n").encode("utf-8")); sunucu.stdin.flush()
+          gonder({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18",
+                  "capabilities": {}, "clientInfo": {"name": "ci", "version": "1"}}})
+          gonder({"jsonrpc": "2.0", "method": "notifications/initialized"})
+          # arama sorguyu gömer: tam sürümde model ve torch'un derlenmiş dosyaları bu süreçte yüklü kalır
+          gonder({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                  "params": {"name": "hafiza_ara", "arguments": {"soru": "yemek", "proje": "genel"}}})
+          import threading; cevap = []
+          def oku():
+              for satir in sunucu.stdout:
+                  m = json.loads(satir)
+                  if m.get("id") == 2:
+                      cevap.append(m); return
+          t = threading.Thread(target=oku, daemon=True); t.start(); t.join(600)
+          assert cevap and "mantı" in json.dumps(cevap[0], ensure_ascii=False), f"açık oturum sunucusu cevap vermedi: {cevap}"
+          try:
+              r = kur()                              # güncelleme: kayıt ve kullanıcı metni korunmalı
+          finally:
+              sunucu.kill(); sunucu.wait()
+          assert "SONUÇ: kurulum sağlıklı" in r.stdout and "COUNCIL-KURULUM: TAMAM" in r.stdout, "açık oturumda güncelleme"
           assert "mantı" in y("ara", "mantı")
           assert (k / "CLAUDE.md").read_text(encoding="utf-8").startswith("# Notlarım\nBenim kuralım.")
           v = json.loads((k / ".council" / "konum.json").read_text(encoding="utf-8"))["veri"]

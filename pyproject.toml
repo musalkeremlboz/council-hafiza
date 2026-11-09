@@ -1,11 +1,11 @@
 [project]
 name = "council-hafiza"
-version = "0.2.0"
+version = "0.2.1"
 description = "COUNCIL: bütün yapay zeka araçlarının ortak hafızası (MCP sunucusu)"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
-dependencies = ["fastmcp>=4.1,<5", "numpy>=1.26"]
+dependencies = ["fastmcp>=4.1,<5", "numpy>=1.26", "certifi"]
 
 [project.optional-dependencies]
 vektor = ["sentence-transformers>=3", "torch"]

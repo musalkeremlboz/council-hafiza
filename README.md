@@ -25,6 +25,9 @@ da Claude Code'un çalıştığı herhangi bir giriş.
   (şifre, token, IBAN, kart, TC kimlik no) model çağrısından önce temizlenir ve hiç kaydedilmez.
 - **Bakım:** günde en çok bir kez tekrarları arşivler, tamamlanmış ve çelişen kayıtları geçersiz kılar (Sonnet).
 - **Yedek:** her gün `.council/yedek/` altına (14 gün); her güncellemeden önce ayrıca.
+- **Güncelleme bildirimi:** yeni bir sürüm yayımlanınca oturum başında Claude size söyler; onaylarsanız notlarınızı
+  koruyarak günceller. Bunun için günde en çok bir kez GitHub'dan yalnız son sürüm numarası okunur (veri gönderilmez);
+  kapatmak için veri klasöründeki `ayar.json`'a `"guncelleme_denetimi": false` yazın.
 - **Arama:** BM25 (Türkçe kök bulma, Türkçe karaktersiz yazıma duyarsız) + anlamsal arama (BGE-M3, çok dilli; ilk
   kurulumda ~2,5 GB indirilir, çalışırken 2–3 GB bellek). `--vektorsuz` ile yalnız kelime araması.
 

@@ -37,6 +37,7 @@ WINDOWS = os.name == "nt"
 ALT_KOMUT: list[str] | None = None
 # Özet hook'unun MCP istemcisi. None ise ~/.claude.json'daki uzak sunucu kullanılır; yerel sürüm süreç içi istemci verir.
 OZET_MCP = None
+OZET_EK = None                # yerel sürüm: hook girdisini alıp özetin başına eklenecek notu (ör. yeni sürüm) döndürür
 YEREL = False                 # yerel (klasör) sürüm: cihaz raporu yok, sunucu tanımı yok
 
 
@@ -279,6 +280,13 @@ def cmd_ozet() -> None:
                     + tablo)
         except Exception:
             pass
+    if OZET_EK is not None:
+        try:
+            ek = OZET_EK(data)
+            if ek:                        # en başa: hafıza kayıtlarının arasında değil, onlardan önce ve ayrı
+                ctx = ek + "\n\n" + ctx
+        except Exception as e:
+            log(f"özet eki alınamadı: {str(e)[:200]}")
     # ensure_ascii: çıktı saf ASCII olur; Windows'ta konsol/boru kod sayfası Türkçe harfleri bozamaz
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}), flush=True)
     if YEREL:

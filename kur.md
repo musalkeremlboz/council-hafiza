@@ -130,8 +130,13 @@ Windows PowerShell'de başına `&` koy: `& "<venv-python>" -X utf8 -P -m council
 Kısa bir özet ver: kurulan sürüm, verinin yeri, sağlık kontrolü sonucu, yedeklerin yeri (kurucunun `yedekler:` satırı).
 
 ## Güncelleme ve sorun giderme
-- **Güncelleme:** kullanıcı yine bu belgeyi okutur; aynı adımlar. Kurucu önce veritabanını yedekler, yalnız kendi
-  dosyalarını yeniler; kayıtlar ve kullanıcının metinleri korunur.
+- **Güncelleme:** yeni bir sürüm yayımlanınca oturum başındaki hafıza özetinde "COUNCIL GÜNCELLEMESİ" notu çıkar (günde
+  en çok bir kez GitHub'a bakılır). Kullanıcı onaylarsa ya da bu belgeyi yine okutursa aynı adımları uygula (1–4; 5. adımdaki
+  tanışmayı güncellemede atla, yalnız `doktor` ve `ara` ile kaydın durduğunu göster). Güncelleme açık oturumdan yapılabilir:
+  kurucu önce veritabanını yedekler, yalnız kendi dosyalarını yeniler; kayıtlar ve kullanıcının metinleri korunur. Yeni kod
+  bir sonraki oturumda devreye girer: bitince kullanıcıdan Claude Code'dan çıkıp yeni oturum açmasını iste.
+  Elle denetim: `"<venv-python>" -X utf8 -P -m council_hafiza.yerel guncelleme`. Bildirimi kapatmak için veri klasöründeki
+  `ayar.json`'a `"guncelleme_denetimi": false` yazılır (bunu yalnız kullanıcı isterse yap).
 - **Sağlık kontrolü:** `"<venv-python>" -X utf8 -P -m council_hafiza.yerel doktor`
 - **Kâtip günlüğü:** `"<venv-python>" -X utf8 -P -m council_hafiza.yerel katip-durum`
 - **Klasör taşındıysa:** kurucuyu yeni yerde yeniden çalıştır (yollar yenilenir, veri korunur).

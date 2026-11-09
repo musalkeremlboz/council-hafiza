@@ -5,8 +5,12 @@ on:
 permissions:
   contents: read
 jobs:
+  denetim:
+    # Bütün testler ve Windows/macOS kurulum denemeleri (Windows'ta tam sürüm) geçmeden sürüm yayımlanmaz
+    uses: ./.github/workflows/ci.yml
   paketle:
     # Test ve paketleme yazma yetkisi olmadan; yayımlama ayrı işte, yalnız hazır dosyalarla
+    needs: denetim
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,15 +25,26 @@ jobs:
           test "v$v" = "${GITHUB_REF_NAME}"
       - run: python -m pip install ".[test]" && python -m pytest -q
       - run: python scripts/paketle.py
+      - name: sürüm notu (etiket açıklaması)
+        run: |
+          git fetch --force --depth=1 origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          { git tag -l --format='%(contents)' "$GITHUB_REF_NAME" | sed '/^Co-Authored-By:/d'
+            echo; echo "Kurulum ve güncelleme için README'deki cümleyi Claude Code'a yazın."; } > dist/NOTLAR.md
+          cat dist/NOTLAR.md
       - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: |
             dist/council-hafiza-*.zip
             dist/SHA256SUMS.txt
+            dist/NOTLAR.md
   yayimla:
     needs: paketle
     runs-on: ubuntu-latest
+    # oku-karşılaştır-yayımla-ilerlet sırası aynı anda tek sürüm için çalışır (iki sürüm üst üste gelirse eskisi "son" olmaz)
+    concurrency:
+      group: surum-yayimla
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -42,5 +57,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          # Daha yeni bir sürüm önce yayımlandıysa bu sürüm "son sürüm" olmaz ve main geri alınmaz
+          simdiki=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          enyeni=$(printf '%s\n%s\n' "$simdiki" "$GITHUB_REF_NAME" | sed '/^$/d' | sort -V | tail -1)
+          if [ "$enyeni" = "$GITHUB_REF_NAME" ]; then son=true; else son=false; fi
           gh release create "$GITHUB_REF_NAME" dist/council-hafiza-*.zip dist/SHA256SUMS.txt \
-            --title "$GITHUB_REF_NAME" --notes "Kurulum için README'deki cümleyi Claude Code'a yazın."
+            --title "$GITHUB_REF_NAME" --notes-file dist/NOTLAR.md --verify-tag --latest=$son
+          # güvence: en yüksek numaralı sürüm "son sürüm" olarak işaretli kalsın
+          enbuyuk=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          if [ -n "$enbuyuk" ] && [ "$enbuyuk" != "$GITHUB_REF_NAME" ] && [ "$son" = true ]; then son=false; fi
+          if [ -n "$enbuyuk" ]; then gh release edit "$enbuyuk" --latest > /dev/null; fi
+          if [ "$son" = true ]; then
+            # kullanıcıların okuduğu main (kur.md) ancak sürüm yayımlanınca ilerler; yalnız ileri sarma (force=false)
+            # iş akışı dosyası değişen sürümlerde bu jetonun izni yetmez: yayınlayan Mac'teki yayinla.py ilerletir
+            if gh api -X PATCH "repos/$GH_REPO/git/refs/heads/main" -f sha="$GITHUB_SHA" -F force=false > /dev/null; then
+              echo "main → $GITHUB_SHA"
+            else
+              echo "::warning::main ilerletilemedi; deploy/yayinla.py ilerletecek"
+            fi
+          fi

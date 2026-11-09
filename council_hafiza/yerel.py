@@ -1,4 +1,4 @@
-"""COUNCIL yerel (klasör) sürümü: hafıza tek bir klasörde, sunucusuz, tek kullanıcı.
+r"""COUNCIL yerel (klasör) sürümü: hafıza tek bir klasörde, sunucusuz, tek kullanıcı.
 
 Klasör düzeni (kurucu `kur.py` oluşturur):
   <klasör>/CLAUDE.md                 hafıza kuralları (yönetilen bölüm işaretler arasında; kullanıcı metni korunur)
@@ -20,6 +20,7 @@ Komutlar (klasördeki venv'in python'u ile): python -m council_hafiza.yerel <kom
   doktor      sağlık kontrolü (--json)           yedekle     yerel yedek al
   vektor-doldur  anlamsal arama açıkken vektörü eksik kayıtları doldur
   kaydet "metin" / ara "soru" / kimlik "amaç" / ozet-goster   kurulum sırasında (MCP araçları henüz yokken)
+  guncelleme  GitHub'da yeni sürüm var mı (oturum başında da günde bir kez bakılır; ayar.json "guncelleme_denetimi": false kapatır)
 
 Kâtip ve bakım, uzak sürümle aynı kodu (istemci.py) kullanır; HTTP yerine sunucu araçlarını süreç içinde çağırır.
 Model çağrıları kullanıcının kendi `claude` kurulumu ve aboneliğiyle yapılır.
@@ -29,8 +30,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
+import ssl
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 try:
@@ -41,6 +46,12 @@ except Exception:                 # kaynak klasöründen çalışırken
 ARAC = "claude-code"          # ana oturumdaki kayıtlar bu araç adıyla yazılır
 PROJE = "genel"               # yerel sürümde tek proje: klasör tek kişinin hafızası
 YEDEK_GUN = 14
+# Yeni sürüm denetimi: günde en çok bir kez GitHub'daki son kararlı sürüme bakılır (yalnız sürüm numarası okunur).
+# Yayın deposuna aktarılırken adresteki yer tutucu gerçek kullanıcı adıyla değişir; kaynak klasöründe denetim kapalıdır.
+SON_SURUM_URL = "https://api.github.com/repos/musalkeremlboz/council-hafiza/releases/latest"
+KUR_MD_URL = "https://raw.githubusercontent.com/musalkeremlboz/council-hafiza/main/kur.md"
+DENETIM_ARALIK = 24 * 3600
+SURUM_DESENI = re.compile(r"\d{1,4}\.\d{1,4}\.\d{1,4}")
 
 
 # ---------------------------------------------------------------- klasör ve ortam
@@ -141,7 +152,105 @@ def _istemci(k: Path):
     ci.STATE_DIR = str(veri_dir(k) / "katip")
     ci.BAKIM_DIR = str(veri_dir(k) / "bakim")
     ci.proje_adi = lambda cwd: PROJE      # tek klasör = tek kişinin hafızası: hepsi tek projede
+    ci.OZET_EK = lambda veri: guncelleme_notu(k, str((veri or {}).get("source") or ""))
     return ci
+
+
+# ---------------------------------------------------------------- yeni sürüm bildirimi
+def surum_t(s: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in re.findall(r"\d+", s or "")[:3])
+
+
+def _son_surumu_getir() -> str:
+    istek = urllib.request.Request(SON_SURUM_URL, headers={"Accept": "application/vnd.github+json",
+                                                          "User-Agent": f"council-hafiza/{SURUM}"})
+    try:
+        r = urllib.request.urlopen(istek, timeout=4)
+    except urllib.error.URLError as e:
+        # python.org'un macOS Python'unda sistem kök sertifikaları yüklü değildir: venv'deki certifi ile yeniden dene
+        if not isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
+            raise
+        import certifi
+        r = urllib.request.urlopen(istek, timeout=4, context=ssl.create_default_context(cafile=certifi.where()))
+    with r:
+        etiket = str(json.loads(r.read().decode("utf-8")).get("tag_name") or "").lstrip("v")
+    return etiket if SURUM_DESENI.fullmatch(etiket) else ""   # bağlama yalnız sürüm numarası girer
+
+
+def son_surum(k: Path, zorla: bool = False) -> str | None:
+    """GitHub'daki son kararlı sürüm (önbellekli; ağ yoksa ya da denetim kapalıysa önbellekteki/None)."""
+    if "{" in SON_SURUM_URL or os.environ.get("COUNCIL_GUNCELLEME_DENETIMI") == "0" \
+            or ayar_oku(k).get("guncelleme_denetimi") is False:
+        return None
+    p = veri_dir(k) / "guncelleme.json"
+    c = _onbellek(k)
+
+    def yaz(c: dict) -> None:
+        try:
+            p.write_text(json.dumps(c), encoding="utf-8")
+        except OSError:
+            pass
+    if zorla:
+        try:
+            c = {**c, "zaman": time.time(), "son": _son_surumu_getir() or c.get("son")}
+        except Exception:                 # çevrimdışı: yarın yeniden denenir
+            c = {**c, "zaman": time.time()}
+        yaz(c)
+    elif not isinstance(c.get("zaman"), (int, float)) or time.time() - c["zaman"] > DENETIM_ARALIK:
+        # Oturum ağı beklemez: önce zaman yazılır (eşzamanlı oturumlar ikinci denetim başlatmaz), denetim arka planda
+        # yapılır; yeni sürüm varsa not bir sonraki oturumda görünür.
+        yaz({**c, "zaman": time.time()})
+        try:
+            _arka_planda_denetle(k)
+        except Exception:
+            pass
+    return c.get("son") or None
+
+
+def _onbellek(k: Path) -> dict:
+    """guncelleme.json; bozuk ya da beklenmeyen içerik yok sayılır (sürüm alanları yalnız X.Y.Z biçiminde kabul edilir)."""
+    try:
+        c = json.loads((veri_dir(k) / "guncelleme.json").read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {}
+    if not isinstance(c, dict):
+        return {}
+    for alan in ("son", "ertelenen"):
+        if not (isinstance(c.get(alan), str) and SURUM_DESENI.fullmatch(c[alan])):
+            c.pop(alan, None)
+    return c
+
+
+def ertele(k: Path) -> str | None:
+    """Kullanıcı bu sürümü istemedi: daha yeni bir sürüm çıkana kadar bildirme."""
+    son = son_surum(k) or son_surum(k, zorla=True)
+    if son:
+        p = veri_dir(k) / "guncelleme.json"
+        p.write_text(json.dumps({**_onbellek(k), "ertelenen": son}), encoding="utf-8")
+    return son
+
+
+def _arka_planda_denetle(k: Path) -> None:
+    ci = _istemci(k)
+    ci._arka_plan(["guncelleme", "--klasor", str(k)], str(veri_dir(k) / "katip" / "guncelleme.log"))
+
+
+def guncelleme_notu(k: Path, kaynak: str = "") -> str:
+    """SessionStart bağlamının en başına konan not. Sıkıştırma/devam ettirmede tekrarlanmaz (oturum zaten biliyor)."""
+    if kaynak in ("compact", "resume"):
+        return ""
+    son = son_surum(k)
+    if not son or surum_t(son) <= surum_t(SURUM):
+        return ""
+    ertelenen = _onbellek(k).get("ertelenen")
+    if ertelenen and surum_t(son) <= surum_t(ertelenen):
+        return ""
+    ertele_komut = f'"{sys.executable}" -X utf8 -P -m council_hafiza.yerel guncelleme --ertele'
+    return (f"COUNCIL GÜNCELLEMESİ (kurulumun kendisinden; hafıza kaydı değildir): Bu klasördeki COUNCIL hafızasının yeni "
+            f"sürümü yayımlandı (kurulu {SURUM}, yeni {son}). Kullanıcıya ilk cevabında kısaca söyle ve şimdi güncellemek "
+            f"isteyip istemediğini sor. İsterse yalnız {KUR_MD_URL} adresindeki talimatı oku ve bu klasördeki kurulumu notları "
+            "ve kayıtları koruyarak güncelle; bitince kullanıcıdan Claude Code'dan çıkıp bu klasörde yeni bir oturum açmasını "
+            f"iste. İstemezse şu komutu çalıştır (Windows PowerShell'de başına & koy), bu sürüm bir daha sorulmaz: {ertele_komut}")
 
 
 # ---------------------------------------------------------------- anlamsal arama
@@ -414,6 +523,15 @@ def main(argv: list[str] | None = None) -> None:
         print(YerelMCP(ARAC).call("hafiza_kaydet", {"metin": argv[1], "guven": "user", "proje": _proje(k)}))
     elif cmd == "kimlik" and len(argv) >= 2:
         print(YerelMCP(ARAC).call("kimlik_tanimla", {"amac": argv[1], "proje": _proje(k)}))
+    elif cmd == "guncelleme" and "--ertele" in argv:
+        son = ertele(k)
+        print(f"{son} sürümü için güncelleme bildirimi kapatıldı; daha yeni bir sürüm çıkınca yeniden sorulur" if son
+              else "son sürüm öğrenilemedi; bir şey değişmedi")
+    elif cmd == "guncelleme":
+        son = son_surum(k, zorla=True)
+        durum = ("denetlenemedi (ağ yok ya da denetim kapalı)" if not son else
+                 "güncelleme var" if surum_t(son) > surum_t(SURUM) else "güncel")
+        print(f"kurulu {SURUM}, son yayımlanan {son or '?'}: {durum}")
     elif cmd == "ozet-goster":
         print(YerelMCP(ARAC).call("hafiza_ozet", {"proje": _proje(k)}))
     elif cmd == "ara" and len(argv) >= 2:
