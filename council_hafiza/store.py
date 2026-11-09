@@ -67,6 +67,10 @@ def sha(s: str) -> str:
     return hashlib.sha256(s.encode()).hexdigest()
 
 
+class Cakisma(ValueError):
+    """Kayıt, işlem sürerken güncel olmaktan çıktı (başka bir yazım araya girdi). Çağıran yeniden deneyebilir."""
+
+
 @dataclass
 class Actor:
     tool: str
@@ -268,8 +272,12 @@ class Store:
         return bool(self.q(f"SELECT 1 FROM records WHERE id=? AND {self.CURRENT}", (rid,)))
 
     def supersede(self, actor: Actor, old_id: str, new_id: str | None, reason: str) -> bool:
-        """Yalnız hâlâ güncel olan kaydı geçersiz kılar; kayıt bu arada değiştiyse False döner (eşzamanlı yazımlara karşı)."""
+        """Yalnız hâlâ güncel olan kaydı geçersiz kılar; kayıt bu arada değiştiyse False döner (eşzamanlı yazımlara karşı).
+        Yerine geçen kayıt verildiyse o da işlem içinde güncel olmalı ve eskisinden farklı olmalı: arşivdeki ya da geçersiz
+        bir kayda bağlanma ve A↔B döngüsü oluşmaz."""
         with self.yaz():
+            if new_id and (new_id == old_id or not self.is_current(new_id)):
+                return False
             new = self.get(new_id) if new_id else None
             valid_to = (new or {}).get("valid_from") or time.strftime("%Y-%m-%d")
             cur = self.db.execute(f"UPDATE records SET superseded_by=?, valid_to=? WHERE id=? AND {self.CURRENT}",
@@ -298,15 +306,15 @@ class Store:
 
     def replace_records(self, actor: Actor, old_ids: list[str], rec: dict, reason: str, action: str) -> str:
         """Yeni bir kayıt yazar ve eskilerin HEPSİNİ onunla geçersiz kılar; tek işlemde, ya hep ya hiç (Gezgin'in düzelt ve
-        birleştir işlemleri). Eski kayıtlardan biri bu arada değiştiyse ValueError atar ve hiçbir şey yazılmaz."""
+        birleştir işlemleri). Eski kayıtlardan biri bu arada değiştiyse Cakisma atar ve hiçbir şey yazılmaz."""
         with self.yaz():
             for o in old_ids:
                 if not self.is_current(o):
-                    raise ValueError(f"{o} artık güncel değil (başka biri değiştirmiş olabilir)")
+                    raise Cakisma(f"{o} artık güncel değil (başka biri değiştirmiş olabilir)")
             rid = self.add_record(actor, rec)
             for o in old_ids:
                 if not self.supersede(actor, o, rid, reason):
-                    raise ValueError(f"{o} geçersiz kılınamadı")
+                    raise Cakisma(f"{o} geçersiz kılınamadı")
             self.log(actor, action, rid, {"kaynaklar": list(old_ids), "neden": reason})
         return rid
 

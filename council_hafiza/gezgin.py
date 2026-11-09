@@ -17,21 +17,20 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import re
 import time
 from pathlib import Path
 
-import numpy as np
-
+from . import search
 from .secrets_guard import find_secrets
-from .store import KINDS, TRUST, VISIBILITY, Actor
+from .store import KINDS, TRUST, VISIBILITY, Actor, Cakisma
+from .textnorm import stems
 
 ARAC = "gezgin"
-ANLAM_ESIK = 0.5          # BGE-M3 kosinüs benzerliği; altı "ilgisiz" sayılır
+ANLAM_ESIK = 0.5          # BGE-M3 kosinüs benzerliği; altı "ilgisiz" sayılır. Ölçüldü: tasarim/GEZGIN.md §5.1
 SAYFA = 50
 BURADA = Path(__file__).resolve().parent
-KID = re.compile(r"R\d{5}")
+KID = re.compile(r"(?<![A-Za-z0-9])R\d{5}(?!\d)")     # R000011 gibi daha uzun bir kimliğin içinden eşleşmez
 
 
 # ------------------------------------------------------------------ yardımcılar (saf, test edilebilir)
@@ -69,11 +68,13 @@ def disa(r: dict) -> dict:
             "arac": r["tool"], "proje": r["project"], "olusturma": r["created_at"], "durum": durum(r)}
 
 
-def _tarih(v: str | None) -> str:
+def kodlanabilir(*metinler: str) -> bool:
+    """Tek başına vekil karakter gibi UTF-8'e yazılamayan içerik var mı (JSON'da \\ud800 olarak gelebilir)."""
     try:
-        return _dt.date.fromisoformat(str(v or "").strip()).isoformat()
-    except ValueError:
-        return time.strftime("%Y-%m-%d")
+        " ".join(metinler).encode("utf-8")
+        return True
+    except UnicodeEncodeError:
+        return False
 
 
 def suz(kayitlar: list[dict], p: dict) -> list[dict]:
@@ -132,26 +133,38 @@ def dogrula(v: dict) -> tuple[dict | None, str | None]:
         return None, "Geçersiz tür, görünürlük ya da güven değeri."
     if len(metin) < 3:
         return None, "Metin boş olamaz."
-    if len(metin) > 4000 or len(baglam) > 1000:
+    if len(metin) > 4000:
         return None, "Metin çok uzun (en fazla 4000 karakter)."
+    if len(baglam) > 1000:
+        return None, "Bağlam çok uzun (en fazla 1000 karakter)."
+    if not kodlanabilir(metin, baglam, *keys):
+        return None, "Metinde yazılamayan (bozuk) bir karakter var."
+    tarih = str(v.get("tarih") or "").strip()
+    if tarih:
+        try:
+            tarih = _dt.date.fromisoformat(tarih).isoformat()
+        except ValueError:
+            return None, "Geçersiz tarih (YYYY-AA-GG olmalı)."
     found = find_secrets(" ".join([metin, baglam, " ".join(keys)]))
     if found:
         return None, f"Kaydedilmedi: metinde gizli bilgi var ({', '.join(found)}). Şifre, anahtar, IBAN, kart ya da kimlik numarası hafızaya yazılamaz."
     return {"text": metin, "context": baglam, "keys": keys, "kind": tur, "visibility": gor, "trust": guv,
-            "valid_from": _tarih(v.get("tarih"))}, None
+            "valid_from": tarih or None}, None    # boşsa çağıran doldurur (eski kaydın tarihi)
 
 
-def kural_denetle(eskiler: list[dict], yeni: dict, guven_onay: bool = False) -> str | None:
+def kural_denetle(eskiler: list[dict], yeni: dict, guven_onay: bool = False, gorunurluk_onay: bool = False) -> str | None:
     """MCP araçlarındaki geçersiz kılma korumalarının aynısı + projeler arası sızıntı ve sessiz güven yükseltme koruması.
     yeni: yazılacak kayıt ya da (gecersiz-kil'de) yerine geçecek mevcut kayıt; mevcut kayıtsa 'project' alanı da denetlenir."""
     if yeni.get("project") and yeni["visibility"] == "project" and any(o["project"] != yeni["project"] for o in eskiler):
         return "Bir projeye özel kayıt, başka bir projenin kaydının yerine geçemez (bilgi o projeden kaybolur)."
-    if any(o["visibility"] == "project" for o in eskiler):
-        projeler = {o["project"] for o in eskiler}
-        if len(projeler) > 1:
-            return "Farklı projelerin projeye özel kayıtları birleştirilemez."
+    ozel_projeler = {o["project"] for o in eskiler if o["visibility"] == "project"}
+    if ozel_projeler:
         if any(o["visibility"] == "shared" for o in eskiler):
             return "Projeye özel ve ortak kayıtlar birleştirilemez (özel bilgi öbür projelere taşınır)."
+        if len(ozel_projeler) > 1:
+            return "Farklı projelerin projeye özel kayıtları birleştirilemez."
+    if yeni["visibility"] == "shared" and ozel_projeler and not gorunurluk_onay:
+        return "Görünürlük genişletiliyor (projeye özel → ortak). Kaydı bütün projelere açtığını onayla."
     if yeni["visibility"] == "project" and any(o["visibility"] == "shared" for o in eskiler):
         return "Ortak bir kayıt projeye özel bir kayıtla değiştirilemez (öbür projelerden silinmiş olur). Görünürlüğü 'ortak' bırak."
     if yeni["trust"] == "external" and any(o["trust"] == "user" for o in eskiler):
@@ -167,12 +180,14 @@ def neden_al(v: dict, varsayilan: str = "") -> tuple[str | None, str | None]:
     if not isinstance(neden, str):
         return None, "Geçersiz neden."
     neden = neden.strip()[:300] or varsayilan
+    if not kodlanabilir(neden):
+        return None, "Neden alanında yazılamayan (bozuk) bir karakter var."
     if find_secrets(neden):
         return None, "Kaydedilmedi: neden alanında gizli bilgi var. Şifre, anahtar, IBAN ya da kimlik numarası yazma."
     return neden, None
 
 
-def hedef_proje(eskiler: list[dict], yeni: dict) -> str:
+def hedef_proje(eskiler: list[dict]) -> str:
     projeler = {o["project"] for o in eskiler}
     if len(projeler) == 1:
         return projeler.pop()
@@ -188,8 +203,11 @@ def oneriler(denetim_dir: Path, store) -> list[dict]:
         rapor = json.loads(son.read_text(encoding="utf-8"))
     except ValueError:
         return []
+    bulgular = rapor.get("bulgular") if isinstance(rapor, dict) else None
     out = []
-    for b in rapor.get("bulgular", []):
+    for b in bulgular if isinstance(bulgular, list) else []:
+        if not isinstance(b, dict):
+            continue
         bid = str(b.get("id", ""))
         if not (bid.startswith("model-") or bid.startswith("gorev-")):
             continue
@@ -204,11 +222,29 @@ def oneriler(denetim_dir: Path, store) -> list[dict]:
     return out
 
 
+def ilgili(kayitlar: list[dict], soru: str, esik: float | None = None) -> list[dict]:
+    """Arama sonuçları, ilgiye göre sıralı. Bir kayıt iki yoldan biriyle girer:
+    - kelime: sorgudaki farklı köklerin YARIDAN FAZLASINI içeriyorsa (tek ortak kök yetmez: ölçümde ilgisiz aramaların
+      yarısı 'teknik', 'sistem' gibi tek bir kökten sonuç döndürüyordu; eval/gezgin_esik/KARAR.md);
+    - anlam: kosinüs >= esik (verilmezse ANLAM_ESIK).
+    Sıkı kelime kuralı, kaçırdığını anlam yolunun yakalamasına dayanır. Anlam yolu yoksa (gömme kapalı, model hata
+    verdi, hiçbir kayıtta vektör yok) kelime yolu eski hâline döner: tek ortak kök yeter. Aksi hâlde çok kelimeli
+    aramaların üçte biri boş dönerdi (aynı ölçüm)."""
+    if not kayitlar:
+        return []
+    esik = ANLAM_ESIK if esik is None else esik
+    bm, dense = search.scores(kayitlar, soru)
+    q = set(stems(soru))
+    kokler = [q & set(stems(search.doc_text(r))) for r in kayitlar]
+    gecer = [len(k) * 2 > len(q) for k in kokler] if dense is not None else [bool(k) for k in kokler]
+    if dense is not None:
+        gecer = [g or d >= esik for g, d in zip(gecer, dense)]
+    return [kayitlar[i] for i in search.order(bm, dense) if gecer[i]]
+
+
 # ------------------------------------------------------------------ rotalar
 def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: Path) -> None:
     from starlette.responses import FileResponse, JSONResponse
-
-    from . import search
 
     def j(v, code=200):
         return JSONResponse(v, status_code=code, headers=guvenlik)
@@ -235,25 +271,6 @@ def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: P
             return None
         return v if isinstance(v, dict) else None
 
-    def ilgili(kayitlar: list[dict], soru: str) -> list[dict]:
-        """Arama sonuçları: kelime eşleşmesi (BM25 > 0) ya da yeterince yakın anlam (kosinüs >= ESIK). Gömme açıkken
-        search.rank hiçbir kaydı elemediği için eşik burada uygulanır."""
-        if not kayitlar:
-            return []
-        bm = search.bm25_scores([search.doc_text(r) for r in kayitlar], soru)
-        gecer = {r["id"] for r, b in zip(kayitlar, bm) if b > 0}
-        if search.embed_enabled():
-            try:
-                q = search.embed([soru])[0]
-                for r in kayitlar:
-                    if r.get("embedding"):
-                        e = np.frombuffer(r["embedding"], dtype=np.float32)
-                        if e.shape == q.shape and float(e @ q) >= ANLAM_ESIK:
-                            gecer.add(r["id"])
-            except Exception:
-                pass
-        return [r for r in search.rank(kayitlar, soru) if r["id"] in gecer]
-
     def vektor(rec: dict) -> None:
         if search.embed_enabled():
             try:
@@ -274,7 +291,7 @@ def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: P
                 return j({"hata": "Geçersiz istek gövdesi."}, 400)
             try:
                 sonuc, kod = await asyncio.to_thread(fn, v)
-            except ValueError as e:
+            except Cakisma as e:
                 return j({"hata": str(e)}, 409)
             except Exception:
                 logging.getLogger("council.gezgin").exception("gezgin yazma hatası")
@@ -311,11 +328,14 @@ def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: P
         def is_():
             soru = (p.get("q") or "").strip()[:300]
             tum = store.list_records(with_embedding=bool(soru) and search.embed_enabled())
-            secim = suz(tum, p)
-            if soru:
-                tam = [r for r in secim if r["id"].upper() == soru.upper()]
-                secim = tam or ilgili(secim, soru)
+            if KID.fullmatch(soru.upper()):
+                # tam kayıt numarası: süzgeçler yok sayılır; kayıt yoksa kelime aramasına düşülmez (5 harfli kök komşu
+                # numaralarla çakışır, ilgisiz kayıt gelirdi)
+                secim = [r for r in tum if r["id"] == soru.upper()]
+            elif soru:
+                secim = ilgili(suz(tum, p), soru)
             else:
+                secim = suz(tum, p)
                 sira = p.get("sira", "yeni")
                 secim.sort(key=lambda r: (etkin_tarih(r), r["created_at"]), reverse=(sira != "eski"))
             try:
@@ -374,12 +394,13 @@ def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: P
         rec, hata = dogrula(v)
         if hata:
             return {"hata": hata}, 400
-        hata = kural_denetle([o], rec, v.get("guven_onay") is True)
+        hata = kural_denetle([o], rec, v.get("guven_onay") is True, v.get("gorunurluk_onay") is True)
         if hata:
             return {"hata": hata}, 400
         neden, hata = neden_al(v, "elle düzeltildi")
         if hata:
             return {"hata": hata}, 400
+        rec["valid_from"] = rec["valid_from"] or etkin_tarih(o)
         vektor(rec)
         yeni = store.replace_records(Actor(ARAC, o["project"]), [rid], rec, f"Gezgin: düzeltme — {neden}", "duzelt")
         return {"tamam": True, "yeni": yeni, "mesaj": f"{rid} düzeltildi; yeni kayıt {yeni}."}, 200
@@ -399,16 +420,15 @@ def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: P
         rec, hata = dogrula(v)
         if hata:
             return {"hata": hata}, 400
-        hata = kural_denetle(eskiler, rec, v.get("guven_onay") is True)
+        hata = kural_denetle(eskiler, rec, v.get("guven_onay") is True, v.get("gorunurluk_onay") is True)
         if hata:
             return {"hata": hata}, 400
-        if rec["visibility"] == "project" and len({o["project"] for o in eskiler}) > 1:
-            return {"hata": "Farklı projelerden kayıtlar projeye özel tek kayıtta birleştirilemez."}, 400
         neden, hata = neden_al(v, "elle birleştirildi")
         if hata:
             return {"hata": hata}, 400
+        rec["valid_from"] = rec["valid_from"] or max(etkin_tarih(o) for o in eskiler)
         vektor(rec)
-        yeni = store.replace_records(Actor(ARAC, hedef_proje(eskiler, rec)), ids, rec, f"Gezgin: birleştirme — {neden}", "birlestir")
+        yeni = store.replace_records(Actor(ARAC, hedef_proje(eskiler)), ids, rec, f"Gezgin: birleştirme — {neden}", "birlestir")
         return {"tamam": True, "yeni": yeni, "mesaj": f"{len(ids)} kayıt {yeni} kaydında birleştirildi."}, 200
 
     def arsivle(v):
@@ -445,7 +465,8 @@ def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: P
             return {"hata": "Kayıtlar bulunamadı."}, 404
         if durum(o) != "guncel" or durum(n) != "guncel":
             return {"hata": "İki kayıt da güncel olmalı."}, 409
-        hata = kural_denetle([o], n, guven_onay=True)   # mevcut iki kayıt; yeni kayıt yazılmıyor, güven yükselmiyor
+        # mevcut iki kayıt: yeni kayıt yazılmıyor, güven yükselmiyor, bilgi yeni bir yere açılmıyor
+        hata = kural_denetle([o], n, guven_onay=True, gorunurluk_onay=True)
         if hata:
             return {"hata": hata}, 400
         neden, hata = neden_al(v, "çelişki önerisinden")
@@ -458,5 +479,3 @@ def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: P
     for yol, fn in (("duzelt", duzelt), ("birlestir", birlestir), ("arsivle", arsivle),
                     ("arsivden-cikar", arsivden_cikar), ("gecersiz-kil", gecersiz_kil)):
         mcp.custom_route(f"/panel/gezgin/{yol}", methods=["POST"], include_in_schema=False)(yaz_korumali(fn))
-
-    _ = os

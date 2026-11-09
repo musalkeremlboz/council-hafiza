@@ -154,21 +154,39 @@ function secimCiz() {
 }
 
 // ---------------------------------------------------------------- ayrıntı
-const dar = () => matchMedia("(max-width: 1000px)").matches;
+const DAR = matchMedia("(max-width: 1000px)");
+const dar = () => DAR.matches;
 const ARKA = () => [document.querySelector(".ust"), document.querySelector(".sekmeler"), $("suzgec"), $("secim"), document.querySelector(".liste-sar")];
+const gecmisteAcik = () => !!(history.state && history.state.gezginAyrinti);
+// Ayrıntı açık ve ekran darsa tam ekran iletişim kutusudur: arka plan etkisizleşir, Geri tuşu onu kapatır.
+// Ekran genişleyince (pencere büyür, tablet yan döner) yan panele döner ve arka plan yeniden kullanılır.
+function kutuDurumu() {
+  const a = $("ayrinti"), kutu = a.classList.contains("acik") && dar();
+  if (kutu) { a.setAttribute("role", "dialog"); a.setAttribute("aria-modal", "true"); a.setAttribute("aria-label", "Kayıt ayrıntısı"); }
+  else { a.removeAttribute("role"); a.removeAttribute("aria-modal"); a.removeAttribute("aria-label"); }
+  ARKA().forEach((x) => x && (x.inert = kutu));
+  if (kutu && !gecmisteAcik()) history.pushState({ gezginAyrinti: true }, "");
+}
 function ayrintiAc() {
-  const a = $("ayrinti");
-  a.classList.add("acik");
-  if (dar()) { a.setAttribute("role", "dialog"); a.setAttribute("aria-modal", "true"); ARKA().forEach((x) => x && (x.inert = true)); }
+  $("ayrinti").classList.add("acik");
+  kutuDurumu();
 }
 function ayrintiOdak() { const h = $("ayrinti").querySelector(".a-baslik"); if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: !dar() }); } }
 function ayrintiKapat() {
-  const a = $("ayrinti");
-  a.classList.remove("acik"); a.removeAttribute("role"); a.removeAttribute("aria-modal");
-  ARKA().forEach((x) => x && (x.inert = false));
+  if (gecmisteAcik()) { history.back(); return; }      // Geri ile aynı yol: popstate kapatır
+  ayrintiGizle();
+}
+function ayrintiGizle() {
+  const son = S.acik;
+  $("ayrinti").classList.remove("acik");
+  kutuDurumu();
   S.acik = null;
   document.querySelectorAll(".satir.acik").forEach((x) => x.classList.remove("acik"));
-  if (S.acan && document.contains(S.acan)) S.acan.focus();
+  // odak: açan satır hâlâ sayfadaysa ona; liste yeniden çizildiyse aynı kaydın yeni satırına; o da yoksa liste bilgisine
+  let hedef = S.acan && document.contains(S.acan) ? S.acan : null;
+  if (!hedef && son) hedef = [...document.querySelectorAll(".satir")].find((x) => x.dataset.id === son) || null;
+  if (!hedef) { hedef = $("liste-bilgi"); hedef.setAttribute("tabindex", "-1"); }
+  hedef.focus();
 }
 
 async function ac(id, acan) {
@@ -199,7 +217,7 @@ function ayrintiCiz(v) {
       el("button", { type: "button", class: "dugme ikincil", onclick: () => { S.secili.add(r.id); secimCiz(); listeIsaretle(); bildir(`${r.id} birleştirme seçimine eklendi.`); } }, "Birleştirmeye ekle"),
       el("button", { type: "button", class: "dugme tehlike", onclick: () => arsivFormu(r) }, "Arşivle"));
   } else if (r.durum === "arsiv") {
-    islemler.append(el("button", { type: "button", class: "dugme vurgu", onclick: () => arsivdenCikar(r) }, "Arşivden çıkar"));
+    islemler.append(el("button", { type: "button", class: "dugme vurgu", onclick: (e) => arsivdenCikar(r, e.currentTarget) }, "Arşivden çıkar"));
   } else {
     islemler.append(el("span", { class: "not" }, r.yerine ? `Bu kaydın yerine ${r.yerine} geçti; düzeltme güncel kayıtta yapılır.` : "Bu kayıt geçersiz kılınmış."));
     if (r.yerine) islemler.append(el("button", { type: "button", class: "dugme ikincil", onclick: () => ac(r.yerine) }, `${r.yerine} kaydını aç`));
@@ -242,19 +260,30 @@ function kayitAlanlari(r, onEk) {
   const baglam = el("input", { id: onEk + "-baglam", maxlength: "1000" }); baglam.value = r.baglam || "";
   const anah = el("input", { id: onEk + "-anahtar" }); anah.value = (r.anahtarlar || []).join(", ");
   const tarihK = el("input", { id: onEk + "-tarih", type: "date" }); tarihK.value = r.tarih || "";
+  // projeye özel bir kaydı ortak yapmak (bütün projelere açmak) açık onay ister; sunucu da onaysız isteği reddeder
+  const gorSec = secim(onEk + "-gor", GOR, r.gorunurluk);
+  const acKutu = el("input", { type: "checkbox", id: onEk + "-gor-onay" });
+  const acSatir = el("label", { class: "onay-satir gizli" }, acKutu,
+    el("span", {}, "Bu kaydı bütün projelere açıyorum (şu an yalnız kendi projesinde görünüyor)."));
+  gorSec.addEventListener("change", () => {
+    const gerek = r.gorunurluk === "project" && gorSec.value === "shared";
+    acSatir.classList.toggle("gizli", !gerek);
+    if (!gerek) acKutu.checked = false;
+  });
   const alanlar = el("div", { class: "form-alanlar" },
     el("label", {}, el("span", { class: "et" }, "Metin"), metin),
     el("label", {}, el("span", { class: "et" }, "Bağlam"), baglam),
     el("label", {}, el("span", { class: "et" }, "Arama anahtarları (virgülle)"), anah),
     el("div", { class: "dort" },
       el("label", {}, el("span", { class: "et" }, "Tür"), secim(onEk + "-tur", TUR, r.tur)),
-      el("label", {}, el("span", { class: "et" }, "Görünürlük"), secim(onEk + "-gor", GOR, r.gorunurluk)),
+      el("label", {}, el("span", { class: "et" }, "Görünürlük"), gorSec),
       el("label", {}, el("span", { class: "et" }, "Güven"), secim(onEk + "-guv", GUV, r.guven || "user")),
       el("label", {}, el("span", { class: "et" }, "Tarih"), tarihK)),
+    acSatir,
     el("p", { class: "not" }, "Güveni yükseltirsen (ör. dış kaynak → kullanıcı) bilgiyi doğruladığını onaylamış olursun."));
   const oku = () => ({ metin: metin.value, baglam: baglam.value, anahtarlar: anah.value.split(",").map((x) => x.trim()).filter(Boolean),
     tur: $(onEk + "-tur").value, gorunurluk: $(onEk + "-gor").value, guven: $(onEk + "-guv").value, tarih: tarihK.value,
-    guven_onay: GUVEN_SIRA[$(onEk + "-guv").value] > GUVEN_SIRA[r.guven || "user"] });
+    guven_onay: GUVEN_SIRA[$(onEk + "-guv").value] > GUVEN_SIRA[r.guven || "user"], gorunurluk_onay: acKutu.checked });
   return { alanlar, oku, odak: () => metin.focus() };
 }
 
@@ -300,9 +329,10 @@ function arsivFormu(r) {
   $("f-neden").focus();
 }
 
-async function arsivdenCikar(r) {
+async function arsivdenCikar(r, dugme) {
+  if (dugme) dugme.disabled = true;                      // çift dokunuşta ikinci istek gitmesin
   try { const v = await api("/panel/gezgin/arsivden-cikar", { id: r.id, neden: "Gezgin'den geri alındı" }); bildir(v.mesaj); await yenile(); ac(r.id); }
-  catch (e) { bildir(e.message, true); }
+  catch (e) { bildir(e.message, true); if (dugme) dugme.disabled = false; }
 }
 
 async function birlestirFormu(ids) {
@@ -319,6 +349,10 @@ async function birlestirFormu(ids) {
     kayitlar.splice(0, kayitlar.length, ...kayitlar.filter((x) => x.durum === "guncel"));
   }
   if (kayitlar.length < 2) { bildir("Birleştirmek için en az 2 güncel kayıt gerekli.", true); return; }
+  // sunucunun her durumda reddedeceği seçimler (gezgin.py kural_denetle): formu hiç açma
+  const ozel = kayitlar.filter((x) => x.gorunurluk === "project");
+  if (ozel.length && ozel.length < kayitlar.length) { bildir("Projeye özel ve ortak kayıtlar birleştirilemez (özel bilgi öbür projelere taşınır).", true); return; }
+  if (new Set(ozel.map((x) => x.proje)).size > 1) { bildir("Farklı projelerin projeye özel kayıtları birleştirilemez.", true); return; }
   kayitlar.sort((x, y) => tarih(y).localeCompare(tarih(x)) || y.olusturma - x.olusturma);
   const enYeni = kayitlar[0];
   const temel = { ...enYeni, metin: kayitlar.map((x) => x.metin).join("\n"),
@@ -343,14 +377,16 @@ async function birlestirFormu(ids) {
 
 // ---------------------------------------------------------------- öneriler
 async function onerileriYukle() {
-  try { S.oneriler = (await api("/panel/gezgin/oneriler")).oneriler; } catch (_) { S.oneriler = []; }
+  let hata = "";
+  try { S.oneriler = (await api("/panel/gezgin/oneriler")).oneriler; } catch (e) { S.oneriler = []; hata = e.message; }
   const acik = S.oneriler.filter((o) => o.acik).length;
   $("oneri-say").textContent = acik ? String(acik) : "";
-  onerileriCiz();
+  onerileriCiz(hata);
 }
 
-function onerileriCiz() {
+function onerileriCiz(hata) {
   const k = $("oneri-liste"); k.replaceChildren();
+  if (hata) { k.append(el("p", { class: "aciklama hata", role: "alert" }, `Öneriler yüklenemedi: ${hata}`)); return; }
   if (!S.oneriler.length) {
     k.append(el("p", { class: "aciklama" }, "Şu an öneri yok. Denetim ajanı günde üç kez (08:00, 14:00, 20:00) hafızayı tarar; bulduğu çelişkiler burada görünür."));
     return;
@@ -432,6 +468,10 @@ function bagla() {
   $("secim-temizle").addEventListener("click", () => { S.secili.clear(); secimCiz(); listeIsaretle(); });
   $("birlestir-ac").addEventListener("click", () => birlestirFormu([...S.secili]));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("ayrinti").classList.contains("acik")) ayrintiKapat(); });
+  // sayfa yenilenince tarayıcı eski geçmiş durumunu korur; ayrıntı kapalı açıldığı için işareti temizle
+  if (gecmisteAcik()) history.replaceState(null, "");
+  DAR.addEventListener("change", kutuDurumu);
+  window.addEventListener("popstate", () => { if ($("ayrinti").classList.contains("acik")) ayrintiGizle(); });
 }
 
 (async function basla() {

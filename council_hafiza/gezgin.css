@@ -123,6 +123,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .form textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
 .form .iki { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .form .dort { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.form .onay-satir { display: flex; align-items: flex-start; gap: 10px; border: var(--ince); border-color: var(--turuncu); padding: 8px 10px; background: var(--yuzey); }
+.form .onay-satir input { width: 20px; height: 20px; flex: none; margin-top: 1px; }
 .form .alt { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .hata { color: var(--kotu); font-weight: 600; }
 .not { font-size: 12px; color: var(--soluk); }
@@ -159,6 +161,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .alanlar div:nth-child(3n) { border-right: var(--ince); }
   .alanlar div:nth-child(2n) { border-right: 0; }
   .form .dort { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  input, select, textarea { font-size: 16px; }   /* iOS, 16 pikselden küçük alana odaklanınca sayfayı yakınlaştırır */
 }
 @media (max-width: 560px) {
   .ust, .suzgec, .bilgi, .sayfalar, .aciklama { padding-left: 16px; padding-right: 16px; }

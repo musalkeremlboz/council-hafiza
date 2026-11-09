@@ -249,3 +249,49 @@ def test_oauth_istemci_kapsami(tmp_path):
     assert a.client_projects("c1") is None and st.istemci_kapsami("claude-chat") == (False, None)
     st.x("INSERT INTO istemci_kapsam VALUES ('claude-chat', 'genel,ders', 1)")
     assert a.client_projects("c1") == {"genel", "ders"}
+
+
+@pytest.mark.asyncio
+async def test_ozel_kayit_onaysiz_ortak_yapilamaz():
+    """Araç, projeye özel bir kaydı ortak bir kayıtla değiştiremez: istek tümden reddedilir (karar: 2026-11-10)."""
+    async with Client(mcp) as c:
+        ozel = (await call(c, "hafiza_kaydet", metin="Açık testi: kullanıcının borç yapılandırması var.", gorunurluk="project", proje="acik1")).split()[1]
+        ortak = (await call(c, "hafiza_kaydet", metin="Açık testi: kullanıcı Bursa'da çalışıyor.", proje="acik1")).split()[1]
+        say = lambda: STORE.q("SELECT COUNT(*) AS n FROM records")[0]["n"]
+        n0 = say()
+
+        # hafiza_kaydet: açıkça ortak, varsayılan görünürlük (ortak) ve karışık liste — hiçbiri yazılmaz
+        for ek in ({"gorunurluk": "shared", "yerine_gecer": [ozel]}, {"yerine_gecer": [ozel]}, {"yerine_gecer": [ortak, ozel]}):
+            r = await call(c, "hafiza_kaydet", metin="Açık testi: kullanıcının borç yapılandırması sürüyor.", proje="acik1", **ek)
+            assert r.startswith("KAYDEDİLMEDİ") and ozel in r and "project" in r
+        assert say() == n0 and STORE.is_current(ozel) and STORE.is_current(ortak)
+        assert "sürüyor" not in await call(c, "hafiza_ara", soru="borç yapılandırması", proje="baska-proje")
+
+        # başka projeden: özel kaydın varlığı ele verilmez, eskisi gibi sessizce atlanır
+        r = await call(c, "hafiza_kaydet", metin="Açık testi: ilgisiz ortak bilgi.", yerine_gecer=[ozel], proje="baska-proje")
+        assert r.startswith("Kaydedildi") and ozel not in r and STORE.is_current(ozel)
+
+        # hafiza_gecersiz_kil: var olan ortak kayıt da özel kaydın yerine geçemez
+        r = await call(c, "hafiza_gecersiz_kil", eski_id=ozel, yeni_id=ortak, proje="acik1")
+        assert r.startswith("DEĞİŞMEDİ") and STORE.is_current(ozel)
+
+        # özel → özel güncelleme serbest (iki yoldan da); yenisiz geçersiz kılma da
+        r = await call(c, "hafiza_kaydet", metin="Açık testi: borç yapılandırması 2027'de bitiyor.", gorunurluk="project",
+                       yerine_gecer=[ozel], proje="acik1")
+        assert f"Geçersiz kılınanlar: {ozel}" in r
+        ozel2 = r.split()[1]
+        ozel3 = (await call(c, "hafiza_kaydet", metin="Açık testi: borç bitti.", gorunurluk="project", proje="acik1")).split()[1]
+        assert "geçersiz kılındı" in await call(c, "hafiza_gecersiz_kil", eski_id=ozel2, yeni_id=ozel3, proje="acik1")
+        assert "geçersiz kılındı" in await call(c, "hafiza_gecersiz_kil", eski_id=ozel3, neden="t", proje="acik1")
+
+
+@pytest.mark.asyncio
+async def test_gecersiz_kil_baska_projenin_ozel_kaydini_yeni_id_olarak_gormez():
+    """yeni_id başka projeye özel bir kayıtsa araç onu göremez: 'bulunamadı' döner, varlığı ele verilmez, bağ kurulmaz."""
+    async with Client(mcp) as c:
+        eski = (await call(c, "hafiza_kaydet", metin="Yeni-id testi: ortak eski bilgi.", proje="yid-a")).split()[1]
+        gizli = (await call(c, "hafiza_kaydet", metin="Yeni-id testi: B projesine özel bilgi.", gorunurluk="project", proje="yid-b")).split()[1]
+        r = await call(c, "hafiza_gecersiz_kil", eski_id=eski, yeni_id=gizli, proje="yid-a")
+        assert r == f"{gizli} bulunamadı."                       # hiç olmayan kimlikle aynı cevap
+        assert r.replace(gizli, "R99999") == await call(c, "hafiza_gecersiz_kil", eski_id=eski, yeni_id="R99999", proje="yid-a")
+        assert STORE.is_current(eski) and not STORE.get(eski).get("superseded_by")

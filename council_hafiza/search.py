@@ -69,27 +69,35 @@ def rrf(*lists: np.ndarray, k: int = 60) -> np.ndarray:
     return out
 
 
+def scores(records: list[dict], query: str) -> tuple[np.ndarray, np.ndarray | None]:
+    """(bm25, dense) puanları. dense yalnız gömme açıksa, en az bir kayıtta vektör varsa ve sorgu gömülebildiyse dizidir
+    (vektörü olmayan ya da boyutu uymayan kayıtlar için -1.0); aksi hâlde None. Sorgu en çok bir kez gömülür."""
+    bm = bm25_scores([doc_text(r) for r in records], query)
+    if not embed_enabled():
+        return bm, None
+    have = [i for i, r in enumerate(records) if r.get("embedding")]
+    if not have:
+        return bm, None
+    try:
+        q = embed([query])[0]
+    except Exception:        # model yüklenemedi: yalnız BM25 (arama hiç bozulmasın)
+        return bm, None
+    dense = np.full(len(records), -1.0)
+    for i in have:
+        e = np.frombuffer(records[i]["embedding"], dtype=np.float32)
+        if e.shape == q.shape:
+            dense[i] = float(e @ q)
+    return bm, dense
+
+
+def order(bm: np.ndarray, dense: np.ndarray | None) -> list[int]:
+    """Sıra: dense varsa RRF (bütün kayıtlar), yoksa BM25 (hiç eşleşmeyenler atılır)."""
+    if dense is None:
+        return [int(i) for i in np.argsort(-bm) if bm[i] > 0]
+    return [int(i) for i in np.argsort(-rrf(bm, dense))]
+
+
 def rank(records: list[dict], query: str) -> list[dict]:
     if not records:
         return []
-    docs = [doc_text(r) for r in records]
-    parts = [bm25_scores(docs, query)]
-    if embed_enabled():
-        have = [i for i, r in enumerate(records) if r.get("embedding")]
-        if have:
-            try:
-                q = embed([query])[0]
-            except Exception:        # model yüklenemedi: yalnız BM25 (arama hiç bozulmasın)
-                q = None
-            if q is not None:
-                dense = np.full(len(records), -1.0)
-                for i in have:
-                    e = np.frombuffer(records[i]["embedding"], dtype=np.float32)
-                    if e.shape == q.shape:
-                        dense[i] = float(e @ q)
-                parts.append(dense)
-    sc = rrf(*parts) if len(parts) > 1 else parts[0]
-    order = np.argsort(-sc)
-    if len(parts) == 1:                                  # yalnız BM25: hiç eşleşmeyenleri at
-        order = [i for i in order if sc[i] > 0]
-    return [records[i] for i in order]
+    return [records[i] for i in order(*scores(records, query))]

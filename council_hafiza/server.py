@@ -137,7 +137,8 @@ def hafiza_kaydet(metin: str, baglam: str = "", anahtarlar: list[str] | None = N
     gorunurluk: shared (her proje görür) | project (yalnızca bu proje: iş yeri içi, gizli ticari, ruh sağlığı, borç, iş başvurusu gibi hassas konular).
     guven: user (kullanıcı söyledi) | agent (ajan çıkardı) | external (web/e-posta/araç çıktısı).
     gecerlilik_tarihi: bilginin geçerli olmaya başladığı tarih (YYYY-AA-GG), yoksa bugün.
-    yerine_gecer: bu kaydın güncellediği eski kayıt kimlikleri (örn. ["R00012"])."""
+    yerine_gecer: bu kaydın güncellediği eski kayıt kimlikleri (örn. ["R00012"]). Projeye özel bir kaydı güncelliyorsan
+    gorunurluk="project" ver: ortak bir kayıt projeye özel bir kaydın yerine geçemez, istek reddedilir."""
     a = actor(proje)
     if tur not in KINDS or gorunurluk not in VISIBILITY or guven not in TRUST:
         return f"Geçersiz değer. tur: {KINDS}; gorunurluk: {VISIBILITY}; guven: {TRUST}"
@@ -147,6 +148,12 @@ def hafiza_kaydet(metin: str, baglam: str = "", anahtarlar: list[str] | None = N
         return f"KAYDEDİLMEDİ: metinde gizli bilgi var ({', '.join(found)}). Şifre, anahtar, IBAN, kart veya kimlik numarası hafızaya yazılamaz."
     if len(metin.strip()) < 3:
         return "KAYDEDİLMEDİ: metin boş."
+    eskiler = [(old, STORE.get(old)) for old in yerine_gecer or []]
+    ozel = [old for old, o in eskiler if o and o["visibility"] == "project" and o["project"] == a.project]
+    if gorunurluk == "shared" and ozel:                    # araç özel bilgiyi kullanıcıya sormadan bütün projelere açamaz
+        return (f"KAYDEDİLMEDİ: {', '.join(ozel)} projeye özel; ortak bir kayıt onun yerine geçemez (özel bilgi bütün projelere açılırdı). "
+                'Bilgi özel kalacaksa gorunurluk="project" ile yeniden kaydet. Kaydı ortak yapmak kullanıcının kararıdır: '
+                "kullanıcıya sor; bunu yalnız kendisi yönetici arayüzünden (Gezgin) yapabilir.")
     rec = {"text": metin.strip(), "context": baglam.strip(), "keys": [k.strip() for k in (anahtarlar or []) if k.strip()][:12],
            "kind": tur, "visibility": gorunurluk, "trust": guven, "valid_from": _iso_tarih(gecerlilik_tarihi)}
     if search.embed_enabled():
@@ -159,8 +166,7 @@ def hafiza_kaydet(metin: str, baglam: str = "", anahtarlar: list[str] | None = N
     similar = [r for r in search.rank(STORE.visible_records(a.project), search.doc_text(rec))[:5] if not r.get("superseded_by")]
     rid = STORE.add_record(a, rec)
     done = []
-    for old in yerine_gecer or []:
-        o = STORE.get(old)
+    for old, o in eskiler:
         if o and (o["visibility"] == "shared" or o["project"] == a.project):
             if guven == "external" and o["trust"] == "user":
                 continue                                   # dış kaynak kullanıcı bilgisini geçersiz kılamaz
@@ -185,16 +191,19 @@ def hafiza_gecersiz_kil(eski_id: str, yeni_id: str = "", neden: str = "", proje:
     o = STORE.get(eski_id)
     if not o or not (o["visibility"] == "shared" or o["project"] == a.project):
         return f"{eski_id} bulunamadı."
-    if yeni_id and not STORE.get(yeni_id):
-        return f"{yeni_id} bulunamadı."
+    n = STORE.get(yeni_id) if yeni_id else None
+    if yeni_id and (not n or not (n["visibility"] == "shared" or n["project"] == a.project)):
+        return f"{yeni_id} bulunamadı."                    # başka projenin özel kaydı: varlığı ele verilmez
     if yeni_id and not STORE.is_current(yeni_id):
         return f"DEĞİŞMEDİ: {yeni_id} artık güncel değil (geçersiz ya da arşivde)."
     if yeni_id:   # hafiza_kaydet'in yerine_gecer korumalarıyla aynı
-        n = STORE.get(yeni_id)
         if n["trust"] == "external" and o["trust"] == "user":
             return f"DEĞİŞMEDİ: dış kaynaklı {yeni_id}, kullanıcının söylediği {eski_id} kaydını geçersiz kılamaz."
         if n["visibility"] == "project" and o["visibility"] == "shared":
             return f"DEĞİŞMEDİ: projeye özel {yeni_id}, ortak {eski_id} kaydını öbür projelerden silemez."
+        if n["visibility"] == "shared" and o["visibility"] == "project":
+            return (f"DEĞİŞMEDİ: ortak {yeni_id}, projeye özel {eski_id} kaydının yerine geçemez. Özel bir kaydı ortak yapmak "
+                    f"kullanıcının kararıdır (yalnız Gezgin'den). {yeni_id} özel bilgi içeriyorsa kullanıcıya haber ver.")
     if not STORE.supersede(a, eski_id, yeni_id or None, neden):
         return f"DEĞİŞMEDİ: {eski_id} zaten geçersiz ya da arşivde."
     return f"{eski_id} geçersiz kılındı" + (f", yerine {yeni_id}." if yeni_id else ".")

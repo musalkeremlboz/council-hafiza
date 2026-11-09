@@ -54,3 +54,8 @@ def test_panel_akisi(tmp_path, monkeypatch):
     c.post("/panel/cikis")
     assert c.get("/panel/veri").status_code == 401
     assert [ok for _, ok in auth.kayit] == [False, True]
+
+
+def test_dev_cerez_500_vermez():
+    """Binlerce rakamlı 'bitiş' değeri int() sınırına takılıp 500 üretmesin; geçersiz oturum sayılsın."""
+    assert panel.oturum_gecerli("h", "9" * 5000 + ".x") is False

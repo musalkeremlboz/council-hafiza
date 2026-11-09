@@ -38,7 +38,7 @@ def oturum_gecerli(admin_hash: str, deger: str | None, simdi: float | None = Non
     if not admin_hash or not deger or "." not in deger:
         return False
     bitis, imza = deger.split(".", 1)
-    if not (bitis.isascii() and bitis.isdigit()) or int(bitis) < (simdi or time.time()):
+    if not (bitis.isascii() and bitis.isdigit()) or len(bitis) > 12 or int(bitis) < (simdi or time.time()):
         return False
     beklenen = hmac.new(_anahtar(admin_hash), bitis.encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(beklenen, imza)
