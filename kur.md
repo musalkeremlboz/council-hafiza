@@ -62,6 +62,7 @@ Geçici bir klasöre indir (hedef klasörün içine değil).
 **Windows (PowerShell; Windows PowerShell 5.1'de de çalışır):**
 ```powershell
 $ErrorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"
+[Console]::OutputEncoding = [Text.Encoding]::UTF8          # kurucunun Türkçe çıktısı bozuk görünmesin
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072   # TLS 1.2
 $rel = Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/musalkeremlboz/council-hafiza/releases/latest"
 $zip = $rel.assets | Where-Object name -like "council-hafiza-*.zip" | Select-Object -First 1
@@ -105,7 +106,8 @@ Kurulum birkaç dakika sürebilir (paket indirme); komutu uzun zaman aşımıyla
   kullanıcı istemezse `--vektorsuz` ekle (kurucu, disk 5 GB'tan azsa kendisi kapatır). Python 3.14 kullanılıyorsa ve paket
   kurulumu torch yüzünden başarısız olursa Python 3.13 kur (2. adım).
 - Claude Code `.mcp.json` ve `.claude/` dosyalarına yazmak için izin isteyebilir; kullanıcıdan onaylamasını iste.
-- Çıktının sonunda `SONUÇ: kurulum sağlıklı` görmelisin. `SORUN` satırı varsa düzeltmeden bitirme; çözemezsen
+- Çıktının sonunda `COUNCIL-KURULUM: TAMAM` satırını görmelisin (ASCII; Türkçe harfler konsolda bozuk görünse de okunur).
+  `COUNCIL-KURULUM: SORUN` ya da `COUNCIL-KURULUM: DURDU` ise bitirmedin. `SORUN` satırı varsa düzeltmeden bitirme; çözemezsen
   kullanıcıya satırı göster.
 - Çıktıda `DURDU:` varsa nedenini kullanıcıya aynen söyle. Windows'ta "Erişim engellendi" / WinError 5 ya da 32
   görürsen: kullanıcıdan bu klasördeki bütün Claude Code oturumlarını kapatıp kurucuyu ayrı bir PowerShell

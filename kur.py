@@ -156,7 +156,8 @@ def bom_var(p: Path) -> bool:
 def json_yaz(p: Path, d: dict) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(p.name + ".council-yeni")
-    tmp.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    with open(tmp, "w", encoding="utf-8", newline="") as f:     # Windows'ta \n → \r\n çevirisi olmasın
+        f.write(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
     _yerine_koy(tmp, p)
 
 
@@ -248,7 +249,8 @@ def claude_md_guncelle(k: Path, plan: bool) -> str:
         return "CLAUDE.md: değişiklik yok"
     if not plan:
         tmp = p.with_name("CLAUDE.md.council-yeni")
-        tmp.write_text(yeni, encoding="utf-8")
+        with open(tmp, "w", encoding="utf-8", newline="") as f:  # kullanıcının satır sonları aynen kalır (\r\n çoğalmasın)
+            f.write(yeni)
         _yerine_koy(tmp, p)
     return f"CLAUDE.md: {ne}"
 
@@ -367,6 +369,7 @@ def main(argv: list[str] | None = None) -> int:
         return _kur(a)
     except KurulumHatasi as e:
         print(f"DURDU: {e}")
+        print("COUNCIL-KURULUM: DURDU")
         return 2
 
 
@@ -474,7 +477,9 @@ def _kur(a) -> int:
     r = subprocess.run([str(py), *PY_BAYRAK, "-m", HOOK_IMI, "doktor", "--klasor", str(k)], cwd=str(d))
     if r.returncode != 0:
         print("Kurulum tamamlandı ama sağlık kontrolünde sorun var (yukarıda SORUN satırları).")
+        print("COUNCIL-KURULUM: SORUN")          # ASCII: konsol kod sayfası ne olursa olsun okunur
         return 1
+    print("COUNCIL-KURULUM: TAMAM")
     print("Kurulum tamam. Claude Code'dan çıkıp bu klasörde YENİ bir oturum açın; hafıza özeti oturum başında gelir. "
           "Klasör daha önce güvenilir olarak işaretlenmediyse Claude Code ilk açılışta güven onayı ister.")
     return 0

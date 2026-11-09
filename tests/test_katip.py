@@ -3,12 +3,18 @@ import importlib.util
 import json
 import re
 import os
+import tempfile
 import time
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+
+def yaz(p, metin: str) -> None:
+    """Döküm dosyası: Claude Code gibi UTF-8 ve \n (Windows'ta metin kipinin çevirileri olmadan)."""
+    p.write_bytes(metin.encode("utf-8"))
+
 spec = importlib.util.spec_from_file_location("council_istemci", ROOT / "council_hafiza" / "istemci.py")
 ci = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ci)
@@ -55,7 +61,7 @@ def test_mesaj_filtreleri():
 
 def test_dokum_oku_yarim_satir_ve_offset(tmp_path):
     p = tmp_path / "t.jsonl"
-    p.write_text(line(user("bir")) + line({"type": "system"}) + line(asst({"type": "text", "text": "iki"})) + '{"type": "us')
+    yaz(p, line(user("bir")) + line({"type": "system"}) + line(asst({"type": "text", "text": "iki"})) + '{"type": "us')
     msgs, end = ci.dokum_oku(str(p), 0, 10**6)
     assert [m[3] for m in msgs] == ["bir", "iki"]
     assert end == len(p.read_bytes()) - len('{"type": "us')        # yarım satır okunmadı
@@ -67,7 +73,7 @@ def test_dokum_oku_yarim_satir_ve_offset(tmp_path):
 
 def test_dokum_oku_karakter_siniri(tmp_path):
     p = tmp_path / "t.jsonl"
-    p.write_text("".join(line(user(f"mesaj {i} " + "x" * 100)) for i in range(10)))
+    yaz(p, "".join(line(user(f"mesaj {i} " + "x" * 100)) for i in range(10)))
     msgs, end = ci.dokum_oku(str(p), 0, 250)
     assert len(msgs) == 3 and end == msgs[-1][0]
 
@@ -91,7 +97,7 @@ def test_calissin_mi():
 
 def test_kisa_guncelleme_kaybolmaz(tmp_path):
     p = tmp_path / "s.jsonl"
-    p.write_text(line(user("Vardiyam değişti, artık 12-20.")))
+    yaz(p, line(user("Vardiyam değişti, artık 12-20.")))
     mcp = FakeMCP("İLGİLİ KAYIT YOK")
     total = ci.cmd_katip_is("s3", str(p), str(tmp_path), "SessionEnd", lambda: mcp,
                             lambda *a: {"records": [rec("Vardiya 12:00-20:00 oldu.")]})
@@ -122,8 +128,8 @@ def test_proje_adi(tmp_path):
 
 
 def test_proje_adi_gecici_klasor(monkeypatch):
-    monkeypatch.setattr(ci, "TEMP_PREFIXES", ("/tmp", "/private/tmp"))
-    assert ci.proje_adi("/tmp/x") == "genel"
+    monkeypatch.setattr(ci, "TEMP_PREFIXES", (os.path.realpath(tempfile.gettempdir()),))
+    assert ci.proje_adi(os.path.join(tempfile.gettempdir(), "x")) == "genel"
 
 
 def test_adaylar_ayiklama():
@@ -182,7 +188,7 @@ def test_kayitlari_isle_aday_yoksa_model_cagrilmaz():
 # ------------------------------------------------------------------ uçtan uca (sahte)
 def test_katip_is_uctan_uca(tmp_path):
     p = tmp_path / "s.jsonl"
-    p.write_text(line(user("Muhasebe vize sınavım 21 Kasım 2026'da. Sunucu şifresi: esG22zhm " + "a" * 400))
+    yaz(p, line(user("Muhasebe vize sınavım 21 Kasım 2026'da. Sunucu şifresi: esG22zhm " + "a" * 400))
                  + line(asst({"type": "text", "text": "Not aldım."})))
     mcp = FakeMCP("İLGİLİ KAYIT YOK")
     seen = []
@@ -205,7 +211,7 @@ def test_katip_is_uctan_uca(tmp_path):
 
 def test_katip_is_hatada_offset_ilerlemez(tmp_path):
     p = tmp_path / "s.jsonl"
-    p.write_text(line(user("Önemli bilgi " + "b" * 500)))
+    yaz(p, line(user("Önemli bilgi " + "b" * 500)))
 
     def bad_llm(*a):
         raise RuntimeError("kota doldu")
@@ -241,7 +247,7 @@ def test_temiz_kayit():
 
 def test_baska_oturumdan_kopyalanan_satirlar_atlanir(tmp_path):
     p = tmp_path / "t.jsonl"
-    p.write_text(line(user("eski oturumdan", sessionId="ESKI")) + line(user("bu oturum", sessionId="YENI")) + line(user("kimliksiz")))
+    yaz(p, line(user("eski oturumdan", sessionId="ESKI")) + line(user("bu oturum", sessionId="YENI")) + line(user("kimliksiz")))
     msgs, _ = ci.dokum_oku(str(p), 0, 10**6, sid="YENI")
     assert [m[3] for m in msgs] == ["bu oturum", "kimliksiz"]
 
@@ -255,7 +261,7 @@ class BrokenMCP(FakeMCP):
 
 def test_baglanti_hatasinda_parca_islenmis_sayilmaz(tmp_path):
     p = tmp_path / "s.jsonl"
-    p.write_text(line(user("Önemli bilgi " + "b" * 200)))
+    yaz(p, line(user("Önemli bilgi " + "b" * 200)))
     assert ci.cmd_katip_is("s4", str(p), str(tmp_path), "SessionEnd", lambda: BrokenMCP("İLGİLİ KAYIT YOK"),
                            lambda *a: {"records": [rec("Önemli bilgi")]}) is None
     st = ci.durum_oku("s4")
@@ -264,7 +270,7 @@ def test_baglanti_hatasinda_parca_islenmis_sayilmaz(tmp_path):
 
 def test_model_hep_hata_verirse_parca_atlanir_kota_hatasinda_atlanmaz(tmp_path):
     p = tmp_path / "s.jsonl"
-    p.write_text(line(user("Sorunlu içerik " + "c" * 200)))
+    yaz(p, line(user("Sorunlu içerik " + "c" * 200)))
     size = len(p.read_bytes())
 
     def model_err(*a):
@@ -285,7 +291,7 @@ def test_oturum_sonunda_biriken_tamamen_islenir(tmp_path, monkeypatch):
     monkeypatch.setattr(ci, "SLICE_CHARS", 500)
     monkeypatch.setattr(ci, "CHUNK_CHARS", 500)
     p = tmp_path / "s.jsonl"
-    p.write_text("".join(line(user(f"bilgi {i} " + "d" * 200)) for i in range(12)))
+    yaz(p, "".join(line(user(f"bilgi {i} " + "d" * 200)) for i in range(12)))
     calls = []
     mcp = FakeMCP("İLGİLİ KAYIT YOK")
     ci.cmd_katip_is("e", str(p), str(tmp_path), "SessionEnd", lambda: mcp,
@@ -301,7 +307,7 @@ def test_oturum_sonunda_biriken_tamamen_islenir(tmp_path, monkeypatch):
 def test_hook_metinsiz_kismi_ilerletir(tmp_path, monkeypatch):
     p = tmp_path / "s.jsonl"
     tr = {"type": "user", "sessionId": "h1", "message": {"content": [{"type": "tool_result", "content": "x" * 1000}]}}
-    p.write_text(line(tr) * 5)
+    yaz(p, line(tr) * 5)
     monkeypatch.setattr(ci.sys, "stdin", ci.io.StringIO(json.dumps(
         {"session_id": "h1", "transcript_path": str(p), "cwd": str(tmp_path), "hook_event_name": "Stop"})))
     spawned = []
@@ -320,7 +326,7 @@ def test_sessionend_hata_beklemesine_takilmaz():
 def test_tarama_siniri_hata_beklemesine_uyar(tmp_path, monkeypatch):
     monkeypatch.setattr(ci, "SCAN_MAX_BYTES", 200)
     p = tmp_path / "s.jsonl"
-    p.write_text("".join(line(user(f"kısa {i}", sessionId="c1")) for i in range(20)))
+    yaz(p, "".join(line(user(f"kısa {i}", sessionId="c1")) for i in range(20)))
     spawned = []
     monkeypatch.setattr(ci.subprocess, "Popen", lambda *a, **k: spawned.append(a))
     ev = json.dumps({"session_id": "c1", "transcript_path": str(p), "cwd": str(tmp_path), "hook_event_name": "Stop"})
@@ -361,6 +367,7 @@ def test_genel_kapsam_genel_alana_yazilir_hassas_bilgi_projede_kalir():
     assert [x["proje"] for x in mcp.saved] == ["genel", "council-hafiza", "council-hafiza", "council-hafiza"]
 
 
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="time.tzset yalnız POSIX")
 def test_oturum_metni_mesaj_tarihleri(monkeypatch):
     monkeypatch.setenv("TZ", "Europe/Istanbul"); time.tzset()
     msgs = [(1, "2026-11-06T19:51:00Z", "Kullanıcı", "Adım Deniz."), (2, "2026-11-08T09:00:00Z", "Asistan", "Tamam."),

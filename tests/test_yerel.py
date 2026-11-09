@@ -158,3 +158,16 @@ def test_gizli_bilgi_turkce_karaktersiz():
         assert find_secrets(t), t
     for t in ["Bugün şifre değiştirme kuralını konuştuk", "Toplantı saat 14:30'da", "pin numaramı unuttum"]:
         assert not find_secrets(t), t
+
+
+def test_crlf_satir_sonlari_cogalmaz(tmp_path):
+    """Windows'ta yazılmış CLAUDE.md (\r\n): her güncellemede satır sonu çoğalmamalı."""
+    k = tmp_path / "B"
+    k.mkdir()
+    (k / "CLAUDE.md").write_bytes("# Notlarım\r\nKısa cevap ver.\r\n".encode("utf-8"))
+    for _ in range(3):
+        kur.claude_md_guncelle(k, plan=False)
+        kur.mcp_json_guncelle(k, plan=False)
+    ham = (k / "CLAUDE.md").read_bytes()
+    assert ham.startswith("# Notlarım\r\nKısa cevap ver.".encode("utf-8")) and b"\r\r" not in ham
+    assert b"\r" not in (k / ".mcp.json").read_bytes()
