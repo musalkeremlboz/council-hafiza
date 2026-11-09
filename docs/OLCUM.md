@@ -105,8 +105,8 @@ Aşırı uydurmayı denetlemek için bambaşka bir kurgusal kişiyle (veteriner,
 
 Varsayılanın tek dosyaya üstünlüğü +28,6 puan [+21,9, +35,2], not dosyasına +26,7 [+21,0, +32,9]: ilk sonuç tekrarlandı.
 Projeye özel bilgilerin hepsi başka projeden sorulunca gizli kaldı (15/15). Bağımsız doğrulamanın çekinceleri: kapsam
-sınaması yalnız iş gizliliğini kapsıyor; kâtip iki veri setinde de sıradan bilgilerin ~%20'sini fazladan gizli
-işaretliyor (aynı projeden sorulunca zararsız); üretilmiş diyaloglardaki çelişkiler bütün kolları biraz aşağı çekiyor.
+sınaması yalnız iş gizliliğini kapsıyor; canlı kâtip bu kişide projeye özel 21 bilginin
+4'ünü (tedarikçi fiyatları, yayımlanmamış içerik takvimi) herkese açık işaretledi; üretilmiş diyaloglardaki çelişkiler bütün kolları biraz aşağı çekiyor.
 
 
 ## 8 Kasım 2026 test turu (bütün kollar)
