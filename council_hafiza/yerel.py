@@ -354,7 +354,7 @@ def main(argv: list[str] | None = None) -> None:
     cmd = argv[0] if argv else ""
     k = klasor_bul(argv[1:])
     arac = {"katip-is": "katip", "bakim-is": "bakim"}.get(cmd, ARAC)
-    ortam_kur(k, arac, vektor_sureci=cmd in ("sunucu", "vektor-doldur"))
+    ortam_kur(k, arac, vektor_sureci=cmd in ("sunucu", "vektor-doldur", "ara"))
     if cmd == "sunucu":
         from .server import mcp
         if os.environ.get("COUNCIL_EMBED") != "none":

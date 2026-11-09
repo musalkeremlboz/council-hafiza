@@ -65,7 +65,7 @@ def test_dokum_oku_yarim_satir_ve_offset(tmp_path):
     msgs, end = ci.dokum_oku(str(p), 0, 10**6)
     assert [m[3] for m in msgs] == ["bir", "iki"]
     assert end == len(p.read_bytes()) - len('{"type": "us')        # yarım satır okunmadı
-    with open(p, "a") as f:
+    with open(p, "a", encoding="utf-8", newline="") as f:
         f.write('er", "message": {"content": "üç"}}\n')
     msgs2, end2 = ci.dokum_oku(str(p), end, 10**6)
     assert [m[3] for m in msgs2] == ["üç"] and end2 == len(p.read_bytes())

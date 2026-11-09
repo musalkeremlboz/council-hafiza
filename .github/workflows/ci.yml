@@ -85,16 +85,10 @@ jobs:
           (k / "calendar.py").write_text("raise SystemExit('KULLANICI DOSYASI')", encoding="utf-8")   # gölgeleme sınaması
           assert "Kaydedildi: R00001" in y("kaydet", "Kardeşimin en sevdiği yemek mantı (2026-11-09).")
           assert "mantı" in y("ara", "yemek")
-          if os.environ.get("KURULUM_MODU") == "tam":           # anlamsal arama: MCP sunucusu üzerinden İngilizce soru
-              import asyncio
-              from fastmcp import Client
-              from fastmcp.client.transports import StdioTransport
-              async def sor():
-                  tr = StdioTransport(command=py, args=cfg["args"], env={**os.environ, **cfg["env"]}, cwd=str(k))
-                  async with Client(tr) as c:
-                      return (await c.call_tool("hafiza_ara", {"soru": "favourite dish", "proje": "genel"})).content[0].text
-              cevap = asyncio.run(sor()); print(cevap)
-              assert "mantı" in cevap
+          if os.environ.get("KURULUM_MODU") == "tam":           # anlamsal arama: ortak kelimesi olmayan İngilizce soru
+              print(y("vektor-doldur"))
+              cevap = y("ara", "favourite dish"); print(cevap)
+              assert "mantı" in cevap, "anlamsal arama Türkçe kaydı bulmadı"
           r = kur()                                  # güncelleme: kayıt ve kullanıcı metni korunmalı
           assert "SONUÇ: kurulum sağlıklı" in r.stdout
           assert "mantı" in y("ara", "mantı")
