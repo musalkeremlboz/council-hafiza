@@ -14,7 +14,6 @@ import html
 import json
 import re
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from . import search
 from . import uyg_mantik as M
@@ -39,7 +38,7 @@ class Hata(Exception):
 # ------------------------------------------------------------------ zaman ve ayarlar
 def _saat(dilim: str) -> dt.datetime:
     """Kullanıcının saat dilimindeki şu an (saf yerel zaman; testler bunu sabitler)."""
-    return dt.datetime.now(ZoneInfo(dilim)).replace(tzinfo=None, second=0, microsecond=0)
+    return dt.datetime.now(M.dilim(dilim)).replace(tzinfo=None, second=0, microsecond=0)
 
 
 def ayarlar(store) -> dict:

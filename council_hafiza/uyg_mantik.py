@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime as dt
 import math
 import re
+import zoneinfo
 
 from .secrets_guard import find_secrets
 from .textnorm import tr_lower
@@ -528,6 +529,30 @@ def gorev_coz(metin: str, bugun: dt.date) -> dict:
 
 
 # ------------------------------------------------------------------ ayarlar
+_zoneinfo = zoneinfo.ZoneInfo          # testler "saat dilimi verisi yok" durumunu bununla taklit eder
+# Saat dilimi verisi olmayan sistemlerde (Windows'ta tzdata paketi kurulu değilse) bilinen sabit dilimler.
+# Türkiye 2016'dan beri yaz saati uygulamıyor: Europe/Istanbul sabit UTC+3.
+_SABIT_DILIMLER = {"Europe/Istanbul": dt.timezone(dt.timedelta(hours=3), "Europe/Istanbul"), "UTC": dt.timezone.utc}
+
+
+def dilim(ad: str) -> dt.tzinfo:
+    """Saat dilimi. Sistemde saat dilimi verisi yoksa yalnız _SABIT_DILIMLER çalışır; öbürleri ZoneInfoNotFoundError atar."""
+    try:
+        return _zoneinfo(ad)
+    except zoneinfo.ZoneInfoNotFoundError:
+        if ad in _SABIT_DILIMLER:
+            return _SABIT_DILIMLER[ad]
+        raise
+
+
+def _veri_var() -> bool:
+    try:
+        _zoneinfo("Europe/London")
+        return True
+    except Exception:
+        return False
+
+
 def ayar_dogrula(v: dict) -> dict:
     if not isinstance(v, dict):
         raise Gecersiz("Geçersiz istek.")
@@ -536,11 +561,12 @@ def ayar_dogrula(v: dict) -> dict:
          "sessiz_bas": _saat(v, "sessiz_bas", "Sessiz saat başlangıcı") or VARSAYILAN_AYAR["sessiz_bas"],
          "sessiz_son": _saat(v, "sessiz_son", "Sessiz saat bitişi") or VARSAYILAN_AYAR["sessiz_son"]}
     try:
-        from zoneinfo import ZoneInfo
         if not isinstance(a["saat_dilimi"], str) or not re.fullmatch(r"[A-Za-z_]+(/[A-Za-z_+\-0-9]+){0,2}", a["saat_dilimi"]):
             raise KeyError
-        ZoneInfo(a["saat_dilimi"])
+        dilim(a["saat_dilimi"])
     except Exception:
+        if isinstance(a["saat_dilimi"], str) and not _veri_var():
+            raise Gecersiz("Bu sistemde saat dilimi verisi yok; yalnız Europe/Istanbul ve UTC kullanılabilir.") from None
         raise Gecersiz("Saat dilimi tanınmadı (ör. Europe/Istanbul).") from None
     ham = v.get("yansit", {})
     if not isinstance(ham, dict) or any(k not in UYGULAMALAR or not isinstance(x, bool) for k, x in ham.items()):

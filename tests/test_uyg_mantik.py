@@ -291,3 +291,20 @@ def test_tarih_bul_nokta_yil_ve_ondalik():
     assert f("saat 10.12'de toplantı") is None and f("teslim 21.11") == "2026-11-21" and f("5.1.2027 teslim") == "2027-01-05"
     assert M.gorev_coz("Sözleşme bitişi 15 Haziran 2028.", G) == {"baslik": "Sözleşme bitişi", "son_tarih": "2028-06-15", "oncelik": "orta"}
     assert M.gorev_coz("1.5 litre su iç", G) == {"baslik": "1.5 litre su iç", "son_tarih": "", "oncelik": "orta"}
+
+
+def test_saat_dilimi_verisi_olmayan_sistemde_varsayilan_calisir(monkeypatch):
+    """Windows'ta sistemde saat dilimi verisi yoktur (tzdata paketi de kurulu değilse ZoneInfo hata verir). Varsayılan
+    Europe/Istanbul ve UTC yine çalışmalı: Türkiye 2016'dan beri sabit UTC+3. Başka dilim istenirse anlaşılır hata."""
+    import zoneinfo
+
+    def yok(ad):
+        raise zoneinfo.ZoneInfoNotFoundError(ad)
+    monkeypatch.setattr(M, "_zoneinfo", yok)
+    assert M.dilim("Europe/Istanbul").utcoffset(None) == dt.timedelta(hours=3) and M.dilim("UTC").utcoffset(None) == dt.timedelta(0)
+    assert M.ayar_dogrula({}) == M.VARSAYILAN_AYAR and M.ayar_dogrula({"saat_dilimi": "UTC"})["saat_dilimi"] == "UTC"
+    with pytest.raises(M.Gecersiz, match="saat dilimi verisi"):
+        M.ayar_dogrula({"saat_dilimi": "Europe/Berlin"})
+    from council_hafiza import uygulamalar as U
+    utc = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    assert abs((U._saat("Europe/Istanbul") - utc).total_seconds() - 3 * 3600) < 120
