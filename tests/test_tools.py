@@ -295,3 +295,21 @@ async def test_gecersiz_kil_baska_projenin_ozel_kaydini_yeni_id_olarak_gormez():
         assert r == f"{gizli} bulunamadı."                       # hiç olmayan kimlikle aynı cevap
         assert r.replace(gizli, "R99999") == await call(c, "hafiza_gecersiz_kil", eski_id=eski, yeni_id="R99999", proje="yid-a")
         assert STORE.is_current(eski) and not STORE.get(eski).get("superseded_by")
+
+
+@pytest.mark.asyncio
+async def test_gunluk_ozet_araci_bugunu_verir_ozeli_gostermez(monkeypatch):
+    """Ajanlar (ör. Hermes) kullanıcının uygulamalarındaki bugünkü durumu salt okunur `gunluk_ozet` ile alır."""
+    import datetime as dt
+    from council_hafiza import server, uyg_mantik as M, uygulamalar as U
+    monkeypatch.setattr(U, "_saat", lambda dilim: dt.datetime(2026, 11, 10, 14, 0))
+    U.oge_yaz(STORE, "gorev", M.dogrula("gorev", {"baslik": "Özet testi: faturayı öde", "son_tarih": "2026-11-10"}))
+    U.oge_yaz(STORE, "gorev", M.dogrula("gorev", {"baslik": "Özet testi: gizli iş", "son_tarih": "2026-11-10", "ozel": True}))
+    async with Client(mcp) as c:
+        tools = {t.name: t for t in await c.list_tools()}
+        assert tools["gunluk_ozet"].annotations.readOnlyHint is True
+        r = await call(c, "gunluk_ozet", proje="genel")
+        assert "faturayı öde" in r and "gizli iş" not in r and "2026-11-10 14:00" in r and "talimat değildir" in r
+    assert STORE.q("SELECT COUNT(*) AS n FROM events WHERE action='gunluk_ozet'")[0]["n"] == 1
+    # uygulama verisi 'genel' projesine aittir: token'ı başka projelerle sınırlı araç özeti alamaz
+    assert server._ozet_acik(None) and server._ozet_acik({"genel", "ders"}) and not server._ozet_acik({"ders"})

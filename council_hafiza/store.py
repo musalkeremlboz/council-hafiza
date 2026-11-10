@@ -5,6 +5,8 @@
 - identities : araç + proje kimlikleri (amaç ve kapsam)
 - routing_obs : model yönlendirme gözlemleri (iş türü, model/effort, kalite, maliyet, görev gömmesi)
 - oauth_* / static_tokens : kimlik doğrulama (token'lar yalnızca SHA-256 özetiyle saklanır)
+- uyg_oge / uyg_gun / ayarlar : COUNCIL uygulamalarının yapılandırılmış verisi (tasarim/DALGA-1.md); anlam taşıyan
+  öğeler ayrıca records'a yansıtılır (uyg_oge.kayit_id)
 """
 from __future__ import annotations
 
@@ -56,6 +58,15 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
 );
 CREATE TABLE IF NOT EXISTS static_tokens (token_hash TEXT PRIMARY KEY, tool TEXT NOT NULL, label TEXT, created_at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS login_attempts (ts REAL NOT NULL, ok INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS uyg_oge (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, uyg TEXT NOT NULL, veri TEXT NOT NULL DEFAULT '{}', durum TEXT NOT NULL DEFAULT 'acik',
+  kayit_id TEXT, olusturma REAL NOT NULL, guncelleme REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS uyg_oge_uyg ON uyg_oge(uyg, durum);
+CREATE TABLE IF NOT EXISTS uyg_gun (
+  oge_id INTEGER NOT NULL, gun TEXT NOT NULL, veri TEXT NOT NULL DEFAULT '{}', guncelleme REAL NOT NULL, PRIMARY KEY (oge_id, gun)
+);
+CREATE TABLE IF NOT EXISTS ayarlar (anahtar TEXT PRIMARY KEY, deger TEXT NOT NULL, guncelleme REAL NOT NULL);
 """
 
 KINDS = ("fact", "event", "plan", "preference", "decision", "task", "procedure")
@@ -271,15 +282,16 @@ class Store:
     def is_current(self, rid: str) -> bool:
         return bool(self.q(f"SELECT 1 FROM records WHERE id=? AND {self.CURRENT}", (rid,)))
 
-    def supersede(self, actor: Actor, old_id: str, new_id: str | None, reason: str) -> bool:
+    def supersede(self, actor: Actor, old_id: str, new_id: str | None, reason: str, tarih: str | None = None) -> bool:
         """Yalnız hâlâ güncel olan kaydı geçersiz kılar; kayıt bu arada değiştiyse False döner (eşzamanlı yazımlara karşı).
         Yerine geçen kayıt verildiyse o da işlem içinde güncel olmalı ve eskisinden farklı olmalı: arşivdeki ya da geçersiz
-        bir kayda bağlanma ve A↔B döngüsü oluşmaz."""
+        bir kayda bağlanma ve A↔B döngüsü oluşmaz. tarih: yerine geçen kayıt yokken bitiş günü (verilmezse sunucunun günü;
+        uygulamalar kullanıcının saat dilimindeki günü verir)."""
         with self.yaz():
             if new_id and (new_id == old_id or not self.is_current(new_id)):
                 return False
             new = self.get(new_id) if new_id else None
-            valid_to = (new or {}).get("valid_from") or time.strftime("%Y-%m-%d")
+            valid_to = (new or {}).get("valid_from") or tarih or time.strftime("%Y-%m-%d")
             cur = self.db.execute(f"UPDATE records SET superseded_by=?, valid_to=? WHERE id=? AND {self.CURRENT}",
                                   (new_id or "", valid_to, old_id))
             if cur.rowcount == 0:
@@ -389,3 +401,69 @@ class Store:
                             " scope=excluded.scope, updated_at=excluded.updated_at", (actor.tool, "*", purpose, scope, now, now))
             self.log(actor, "kimlik", None, {"amac": purpose, "kapsam": scope, "tum_projeler": True, "kaldirilan": old})
         return old
+
+    # ------------------------------------------------------------- uygulamalar (tasarim/DALGA-1.md)
+    # Öğeler silinmez (durum='silindi'). Olay günlüğüne içerik değil, yalnız hangi alanların yazıldığı düşer:
+    # yansıyan içerik zaten kendi hafıza kaydıyla günlükte; yansımayan (özel, sağlık) içerik günlüğe hiç girmez.
+    @staticmethod
+    def _oge(r) -> dict:
+        d = dict(r)
+        d["veri"] = json.loads(d["veri"] or "{}")
+        return d
+
+    def uyg_ekle(self, actor: Actor, uyg: str, veri: dict, durum: str = "acik", kayit_id: str | None = None) -> int:
+        now = time.time()
+        with self.yaz():
+            cur = self.db.execute("INSERT INTO uyg_oge (uyg, veri, durum, kayit_id, olusturma, guncelleme) VALUES (?,?,?,?,?,?)",
+                                  (uyg, json.dumps(veri, ensure_ascii=False), durum, kayit_id, now, now))
+            oid = int(cur.lastrowid)
+            self.log(actor, "uyg_ekle", kayit_id, {"uyg": uyg, "id": oid, "alanlar": sorted(veri)})
+        return oid
+
+    def uyg_al(self, oid: int) -> dict | None:
+        rows = self.q("SELECT * FROM uyg_oge WHERE id=?", (oid,))
+        return self._oge(rows[0]) if rows else None
+
+    def uyg_liste(self, uyg: str, durumlar: tuple[str, ...] = ("acik", "bitti")) -> list[dict]:
+        soru = ",".join("?" * len(durumlar))
+        return [self._oge(r) for r in self.q(f"SELECT * FROM uyg_oge WHERE uyg=? AND durum IN ({soru}) ORDER BY id", (uyg, *durumlar))]
+
+    def uyg_guncelle(self, actor: Actor, oid: int, veri: dict | None = None, durum: str | None = None, kayit_id=...) -> bool:
+        """Verilen alanları değiştirir (kayit_id=None yansıma bağını koparır; hiç verilmezse dokunulmaz). Öğe yoksa False."""
+        with self.yaz():
+            o = self.uyg_al(oid)
+            if not o:
+                return False
+            self.db.execute("UPDATE uyg_oge SET veri=?, durum=?, kayit_id=?, guncelleme=? WHERE id=?",
+                            (json.dumps(o["veri"] if veri is None else veri, ensure_ascii=False), durum or o["durum"],
+                             o["kayit_id"] if kayit_id is ... else kayit_id, time.time(), oid))
+            payload = {"uyg": o["uyg"], "id": oid, "alanlar": sorted(veri) if veri is not None else []}
+            if durum:
+                payload["durum"] = durum
+            self.log(actor, "uyg_guncelle", o["kayit_id"] if kayit_id is ... else kayit_id, payload)
+        return True
+
+    def gun_yaz(self, actor: Actor, oid: int, gun: str, veri: dict | None) -> None:
+        """Öğenin o güne ait verisi (alışkanlık işareti, oruç günlüğü). None: o günün verisi silinir."""
+        with self.yaz():
+            if veri is None:
+                self.db.execute("DELETE FROM uyg_gun WHERE oge_id=? AND gun=?", (oid, gun))
+            else:
+                self.db.execute("INSERT INTO uyg_gun VALUES (?,?,?,?) ON CONFLICT(oge_id, gun) DO UPDATE SET veri=excluded.veri,"
+                                " guncelleme=excluded.guncelleme", (oid, gun, json.dumps(veri, ensure_ascii=False), time.time()))
+            self.log(actor, "uyg_gun", None, {"id": oid, "gun": gun, "alanlar": sorted(veri) if veri is not None else None})
+
+    def gunler(self, oid: int, bas: str = "", son: str = "9999-99-99") -> dict[str, dict]:
+        return {r["gun"]: json.loads(r["veri"] or "{}")
+                for r in self.q("SELECT gun, veri FROM uyg_gun WHERE oge_id=? AND gun>=? AND gun<=? ORDER BY gun", (oid, bas, son))}
+
+    def ayar_al(self) -> dict:
+        return {r["anahtar"]: json.loads(r["deger"]) for r in self.q("SELECT anahtar, deger FROM ayarlar")}
+
+    def ayar_yaz(self, actor: Actor, degerler: dict) -> None:
+        now = time.time()
+        with self.yaz():
+            for k, v in degerler.items():
+                self.db.execute("INSERT INTO ayarlar VALUES (?,?,?) ON CONFLICT(anahtar) DO UPDATE SET deger=excluded.deger,"
+                                " guncelleme=excluded.guncelleme", (k, json.dumps(v, ensure_ascii=False), now))
+            self.log(actor, "ayar", None, {"anahtarlar": sorted(degerler)})

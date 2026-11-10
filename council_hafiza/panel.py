@@ -148,5 +148,7 @@ def kaydet(mcp, auth, store) -> None:
 
     from .gezgin import kaydet as gezgin_kaydet
     gezgin_kaydet(mcp, auth, store, girisli, CEREZ, GUVENLIK, denetim_dir)
+    from .uygulamalar import kaydet as uygulama_kaydet
+    uygulama_kaydet(mcp, auth, store, girisli, CEREZ, GUVENLIK)
 
     _ = Response

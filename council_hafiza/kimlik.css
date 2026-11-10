@@ -49,9 +49,26 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-family: var(--baslik); font-size: 22px; text-transform: uppercase; line-height: 1; }
 .sekmeler button.secili { background: var(--metin); color: var(--zemin); }
 
+/* uygulama şeridi: periyodik tablo kutuları (2 harfli sembol + ad) */
+.serit { display: flex; overflow-x: auto; border-bottom: var(--cizgi); scrollbar-width: thin; }
+.serit .kutu { flex: 0 0 auto; display: grid; gap: 2px; min-width: 78px; padding: 8px 12px 7px; border-right: var(--ince); text-decoration: none; }
+.serit .sembol { font-family: var(--baslik); font-size: 26px; line-height: 1; }
+.serit .ad { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--soluk); white-space: nowrap; }
+.serit .kutu:hover { background: var(--ikincil-yuzey); }
+.serit .kutu.secili { background: var(--metin); color: var(--zemin); box-shadow: inset 0 -5px 0 var(--turuncu); }
+.serit .kutu.secili .ad { color: var(--zemin); }
+
+/* bildirim (alt ortada kısa mesaj) */
+.bildirim { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 30;
+  background: var(--ters-zemin); color: var(--ters-metin); border: 2px solid var(--turuncu); padding: 10px 16px; max-width: calc(100vw - 32px); }
+.bildirim.kotu { border-color: var(--kotu); }
+.bildirim.sakli { opacity: 0; pointer-events: none; }
+
 @media (max-width: 560px) {
   .ust { padding-left: 16px; padding-right: 16px; }
   .marka-ad .buyuk { font-size: 28px; }
   .isaret svg { width: 42px; height: 42px; }
+  .serit .kutu { min-width: 66px; padding: 7px 10px 6px; }
+  .serit .sembol { font-size: 22px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

@@ -6,25 +6,22 @@ Panelin içinde çalışır (/panel/gezgin), aynı yönetici oturumunu kullanır
 - arşivle / arşivden çıkar
 Her işlem hash zincirli olay günlüğüne 'gezgin' aracı adına yazılır.
 
-Yazma uçları yalnız JSON kabul eder ve oturumdan türetilen bir CSRF belirteci ister (X-CSRF başlığı); ayrıca tarayıcı
-başka bir siteden geldiğini bildiriyorsa (Origin / Sec-Fetch-Site) istek reddedilir.
+Oturum, CSRF ve JSON gövdesi koruması: web.py (uygulamalarla ortak).
 """
 from __future__ import annotations
 
 import asyncio
 import datetime as _dt
-import hashlib
-import hmac
 import json
-import logging
 import re
 import time
 from pathlib import Path
 
 from . import search
 from .secrets_guard import find_secrets
-from .store import KINDS, TRUST, VISIBILITY, Actor, Cakisma
+from .store import KINDS, TRUST, VISIBILITY, Actor
 from .textnorm import stems
+from .web import Koruma, csrf_belirteci  # noqa: F401  (csrf_belirteci: testler ve eski içe aktarmalar için)
 
 ARAC = "gezgin"
 ANLAM_ESIK = 0.5          # BGE-M3 kosinüs benzerliği; altı "ilgisiz" sayılır. Ölçüldü: tasarim/GEZGIN.md §5.1
@@ -34,11 +31,6 @@ KID = re.compile(r"(?<![A-Za-z0-9])R\d{5}(?!\d)")     # R000011 gibi daha uzun b
 
 
 # ------------------------------------------------------------------ yardımcılar (saf, test edilebilir)
-def csrf_belirteci(admin_hash: str, oturum: str) -> str:
-    anahtar = hashlib.sha256(("council-gezgin-csrf:" + (admin_hash or "")).encode()).digest()
-    return hmac.new(anahtar, (oturum or "").encode(), hashlib.sha256).hexdigest()
-
-
 def etkin_tarih(r: dict) -> str:
     """Kaydın tarihi; boşsa yazıldığı günün (sunucu saatiyle) tarihi. Süzme, sıralama ve görüntüleme hep bunu kullanır."""
     return r.get("valid_from") or time.strftime("%Y-%m-%d", time.localtime(r["created_at"]))
@@ -244,32 +236,10 @@ def ilgili(kayitlar: list[dict], soru: str, esik: float | None = None) -> list[d
 
 # ------------------------------------------------------------------ rotalar
 def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: Path) -> None:
-    from starlette.responses import FileResponse, JSONResponse
+    from starlette.responses import FileResponse
 
-    def j(v, code=200):
-        return JSONResponse(v, status_code=code, headers=guvenlik)
-
-    def csrf_tamam(request) -> bool:
-        site = request.headers.get("sec-fetch-site")
-        if site and site not in ("same-origin", "none"):
-            return False
-        origin = request.headers.get("origin")
-        if origin:
-            host = request.headers.get("host", "")
-            if origin.split("://", 1)[-1].rstrip("/") != host:
-                return False
-        verilen = request.headers.get("x-csrf", "")
-        beklenen = csrf_belirteci(auth.admin_hash or "", request.cookies.get(cerez, ""))
-        return bool(verilen) and hmac.compare_digest(verilen, beklenen)
-
-    async def govde(request) -> dict | None:
-        if not request.headers.get("content-type", "").startswith("application/json"):
-            return None
-        try:
-            v = json.loads(await request.body())
-        except ValueError:
-            return None
-        return v if isinstance(v, dict) else None
+    koruma = Koruma(auth, girisli, cerez, guvenlik, gunluk="council.gezgin")
+    j, yaz_korumali = koruma.j, koruma.yaz
 
     def vektor(rec: dict) -> None:
         if search.embed_enabled():
@@ -278,26 +248,6 @@ def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: P
             except Exception:
                 rec.pop("embedding", None)
             rec["emb_model"] = search.EMBED_MODEL
-
-    def yaz_korumali(fn):
-        """Oturum + CSRF + JSON gövdesi denetimi; işi olay döngüsünü tıkamadan ayrı iş parçacığında çalıştırır."""
-        async def sarmal(request):
-            if not girisli(request):
-                return j({"hata": "Giriş gerekli."}, 401)
-            if not csrf_tamam(request):
-                return j({"hata": "İstek doğrulanamadı (CSRF). Sayfayı yenileyip tekrar dene."}, 403)
-            v = await govde(request)
-            if v is None:
-                return j({"hata": "Geçersiz istek gövdesi."}, 400)
-            try:
-                sonuc, kod = await asyncio.to_thread(fn, v)
-            except Cakisma as e:
-                return j({"hata": str(e)}, 409)
-            except Exception:
-                logging.getLogger("council.gezgin").exception("gezgin yazma hatası")
-                return j({"hata": "Beklenmeyen bir hata oldu; hiçbir şey değiştirilmedi."}, 500)
-            return j(sonuc, kod)
-        return sarmal
 
     # ---- sayfa ve dosyalar
     @mcp.custom_route("/panel/gezgin", methods=["GET"], include_in_schema=False)
@@ -317,7 +267,7 @@ def kaydet(mcp, auth, store, girisli, cerez: str, guvenlik: dict, denetim_dir: P
     async def oturum(request):
         if not girisli(request):
             return j({"hata": "Giriş gerekli."}, 401)
-        return j({"csrf": csrf_belirteci(auth.admin_hash or "", request.cookies.get(cerez, ""))})
+        return j({"csrf": koruma.belirtec(request)})
 
     @mcp.custom_route("/panel/gezgin/kayitlar", methods=["GET"], include_in_schema=False)
     async def kayitlar(request):

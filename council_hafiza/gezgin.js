@@ -7,7 +7,8 @@ const GOR = { shared: "ortak", project: "projeye özel" };
 const GUV = { user: "kullanıcı", agent: "ajan", external: "dış kaynak" };
 const DUR = { guncel: "güncel", eski: "eski", arsiv: "arşiv" };
 const ISLEM = { kaydet: "kaydedildi", gecersiz_kil: "geçersiz kılındı", arsivle: "arşivlendi", arsivden_cikar: "arşivden çıkarıldı",
-  duzelt: "düzeltmeyle yazıldı", birlestir: "birleştirmeyle yazıldı" };
+  duzelt: "düzeltmeyle yazıldı", birlestir: "birleştirmeyle yazıldı",
+  uyg_ekle: "uygulama öğesine bağlandı", uyg_guncelle: "uygulamada güncellendi", uyg_yansit: "uygulamadan yenilendi" };
 const SVGNS = "http://www.w3.org/2000/svg";
 
 function el(tag, attrs, ...kids) {

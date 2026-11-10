@@ -1,4 +1,5 @@
-// COUNCIL işareti (7A · Yörünge): sayfadaki her [data-isaret] öğesinin içine çizilir. Panel, Gezgin ve giriş sayfası ortak kullanır.
+// COUNCIL kimliği: işaret (7A · Yörünge) her [data-isaret] öğesinin içine çizilir; uygulama şeridi her [data-serit] öğesine
+// kurulur (değeri o sayfanın uygulamasıdır). Denetim, Gezgin, uygulamalar ve giriş sayfası ortak kullanır.
 "use strict";
 (() => {
   const NS = "http://www.w3.org/2000/svg";
@@ -22,4 +23,20 @@
     return svg;
   }
   for (const e of document.querySelectorAll("[data-isaret]")) e.append(isaret());
+
+  const UYGULAMALAR = [["panel", "Dn", "Denetim", "/panel"], ["gezgin", "Gz", "Gezgin", "/panel/gezgin"], ["not", "No", "Not", "/panel/not"],
+    ["gorev", "Gr", "Görev", "/panel/gorev"], ["takvim", "Tk", "Takvim", "/panel/takvim"], ["ders", "De", "Ders", "/panel/ders"],
+    ["aliskanlik", "Al", "Alışkanlık", "/panel/aliskanlik"], ["oruc", "Or", "Oruç", "/panel/oruc"], ["ayarlar", "Ay", "Ayarlar", "/panel/ayarlar"]];
+  for (const nav of document.querySelectorAll("[data-serit]")) {
+    for (const [kod, sembol, ad, yol] of UYGULAMALAR) {
+      const a = document.createElement("a");
+      a.href = yol; a.className = "kutu";
+      if (nav.dataset.serit === kod) { a.classList.add("secili"); a.setAttribute("aria-current", "page"); }
+      const s = document.createElement("span"); s.className = "sembol"; s.setAttribute("aria-hidden", "true"); s.textContent = sembol;
+      const n = document.createElement("span"); n.className = "ad"; n.textContent = ad;
+      a.append(s, n); nav.append(a);
+    }
+    const secili = nav.querySelector(".secili");
+    if (secili) nav.scrollLeft = Math.max(0, secili.offsetLeft - 12);       // dar ekranda seçili kutu görünür kalsın
+  }
 })();

@@ -430,6 +430,28 @@ def cihaz_bildir(cihaz: str, bilgi: dict, proje: str = "") -> str:
     return f"Kaydedildi: {cihaz} ({len(temiz)} alan)."
 
 
+# ------------------------------------------------------------ uygulamalar (tasarim/DALGA-1.md)
+def _ozet_acik(izinli: set[str] | None) -> bool:
+    """Uygulama verisi 'genel' projesine aittir: token'ı başka projelerle sınırlı bir araç günlük özeti alamaz."""
+    return izinli is None or "genel" in izinli
+
+
+if not os.environ.get("COUNCIL_KLASOR"):       # yerel (klasör) sürümde uygulamalar yok; araç orada görünmez
+    @mcp.tool(annotations={"readOnlyHint": True, "title": "Günlük özet"})
+    def gunluk_ozet(proje: str = "") -> str:
+        """Kullanıcının COUNCIL uygulamalarındaki (Görev, Takvim, Alışkanlık, Oruç) bugünkü durumu: gecikmiş ve bugünkü
+        görevler, bugünün ve yarının etkinlikleri, bugün bekleyen alışkanlıklar, süren oruç, sessiz saat. Salt okunur.
+        Hatırlatma ya da sabah özeti hazırlarken çağır; sessiz saat etkinse bildirim gönderme. Kullanıcının özel
+        işaretlediği öğeler ve sağlık ayrıntıları (kilo, belirti) burada yer almaz. Yeni görev eklemek için
+        hafiza_kaydet(tur="task") kullan: Görev uygulamasında "Hafızadan" bölümünde görünür."""
+        from . import uygulamalar as U
+        a = actor(proje)
+        if not _ozet_acik(_izinli(a)):
+            return "Erişim yok: günlük özet yalnız 'genel' projesine erişebilen araçlara açık."
+        STORE.log(a, "gunluk_ozet", None, {})
+        return U.ozet_metni(U.gunluk_ozet(STORE))
+
+
 # ------------------------------------------------------------ http rotaları
 if AUTH is not None:
     @mcp.custom_route("/giris", methods=["GET", "POST"], include_in_schema=False)
